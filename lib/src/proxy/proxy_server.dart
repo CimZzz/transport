@@ -1,56 +1,22 @@
 import 'dart:async';
 import 'dart:io';
-import 'server_base.dart';
+import '../server_base.dart';
 
-class TransportServer extends BaseServer {
+class TransportProxyServer extends BaseServer {
 
-	TransportServer({this.localPort, this.remoteAddress, this.remotePort});
+	TransportProxyServer({int localPort, this.remoteAddress, this.remotePort}): super(localPort: localPort);
 
-	final int localPort;
 	final String remoteAddress;
 	final int remotePort;
-
-	ServerSocket _serverSocket;
-	bool _isRunning = false;
-
+	
 	@override
-	bool get isRunning => _isRunning;
-
-	@override
-	Future<void> startServer() async {
-		if (isRunning) {
-			return;
-		}
-		_isRunning = true;
-		_serverSocket = await ServerSocket.bind('127.0.0.1', localPort);
-		_serverSocket.listen((socket) async {
-			_transportSocket(socket, () async {
-				return Socket.connect(remoteAddress, remotePort);
-			}, onError: (e, [stackTrace]) {
-				logError(e, stackTrace);
-			});
-		}, onError: (e, stackTrace) {
+	void acceptSocket(Socket socket) {
+		_transportSocket(socket, () async {
+			return Socket.connect(remoteAddress, remotePort);
+		}, onError: (e, [stackTrace]) {
 			logError(e, stackTrace);
-			closeServer();
 		});
-		return;
 	}
-
-	@override
-	Future<void> closeServer() async {
-		if (isRunning) {
-			_isRunning = false;
-			try {
-				await _serverSocket.close();
-			}
-			catch (e, stackTrace) {
-				logError(e, stackTrace);
-			}
-			return;
-		}
-		return;
-	}
-
 }
 
 /// Transport socket data
@@ -84,7 +50,7 @@ void _transportSocket(Socket srcSocket, Future<Socket> Function() remoteSocketCr
 					remoteSubscription?.cancel();
 					remoteSubscription = null;
 					remoteSocket = null;
-				});
+				}, cancelOnError: true);
 			}
 			if(encodeCallback != null) {
 				remoteSocket.add(await encodeCallback(event));
@@ -96,14 +62,18 @@ void _transportSocket(Socket srcSocket, Future<Socket> Function() remoteSocketCr
 		catch(e, stackTrace) {
 			// transfer data occur error
 			onError?.call(e, stackTrace);
+			srcSocket.destroy();
+			remoteSocket?.destroy();
 		}
 	}, onError: onError ?? (e, stackTrace) {
 		// occur error
+		srcSocket.destroy();
+		remoteSocket?.destroy();
 	}, onDone: () {
 		// completed
 		remoteSubscription?.cancel();
 		remoteSocket?.destroy();
 		remoteSubscription = null;
 		remoteSocket = null;
-	});
+	}, cancelOnError: true);
 }

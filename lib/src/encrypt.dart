@@ -1,8 +1,0 @@
-
-class EncodeManager {
-
-}
-
-class DecodeManager {
-
-}

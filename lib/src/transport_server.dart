@@ -1,86 +1,109 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
-import 'log_interface.dart';
+import 'server_base.dart';
 
-/// Abstract transport server
-abstract class TransportServer {
+class TransportServer extends BaseServer {
 
-	TransportLogInterface _logInterface;
+	TransportServer({this.localPort, this.remoteAddress, this.remotePort});
 
-	set logInterface(TransportLogInterface interface) {
-		_logInterface = interface;
+	final int localPort;
+	final String remoteAddress;
+	final int remotePort;
+
+	ServerSocket _serverSocket;
+	bool _isRunning = false;
+
+	@override
+	bool get isRunning => _isRunning;
+
+	@override
+	Future<void> startServer() async {
+		if (isRunning) {
+			return;
+		}
+		_isRunning = true;
+		_serverSocket = await ServerSocket.bind('127.0.0.1', localPort);
+		_serverSocket.listen((socket) async {
+			_transportSocket(socket, () async {
+				return Socket.connect(remoteAddress, remotePort);
+			}, onError: (e, [stackTrace]) {
+				logError(e, stackTrace);
+			});
+		}, onError: (e, stackTrace) {
+			logError(e, stackTrace);
+			closeServer();
+		});
+		return;
 	}
 
-	void logInfo(dynamic msg) {
-		_logInterface?.logInfo(msg);
+	@override
+	Future<void> closeServer() async {
+		if (isRunning) {
+			_isRunning = false;
+			try {
+				await _serverSocket.close();
+			}
+			catch (e, stackTrace) {
+				logError(e, stackTrace);
+			}
+			return;
+		}
+		return;
 	}
 
-	void logError(dynamic error, StackTrace stackTrace) {
-		_logInterface?.logError(error, stackTrace);
-	}
-
-	/// Whether the server is running
-	bool get isRunning;
-
-	/// Start source server
-	Future<void> startServer();
-
-	/// Close server
-	Future<void> closeServer();
 }
 
 /// Transport socket data
-void transportSocket(Socket srcSocket, Future<Socket> Function() remoteSocketCreator, {
-  void Function(dynamic error, [StackTrace stackTrace]) onError,
-  Future<List<int>> Function(List<int>) encodeCallback,
-  Future<List<int>> Function(List<int>) decodeCallback,
+void _transportSocket(Socket srcSocket, Future<Socket> Function() remoteSocketCreator, {
+	void Function(dynamic error, [StackTrace stackTrace]) onError,
+	Future<List<int>> Function(List<int>) encodeCallback,
+	Future<List<int>> Function(List<int>) decodeCallback,
 }) {
-  Socket remoteSocket;
-  StreamSubscription remoteSubscription;
-  srcSocket.listen((Uint8List event) async {
-    try {
-      if(remoteSocket == null) {
-        remoteSocket = await remoteSocketCreator();
-        remoteSubscription = remoteSocket.listen((event) async {
-          try {
-            if(decodeCallback != null) {
-              srcSocket.add(await decodeCallback(event));
-            }
-            else {
-              srcSocket.add(event);
-            }
-          }
-          catch(e, stackTrace) {
-            // transfer data occur error
-            onError?.call(e, stackTrace);
-          }
-        }, onError: onError ?? (e, stackTrace) {
-          // occur error
-        }, onDone: () {
-          remoteSubscription?.cancel();
-          remoteSubscription = null;
-          remoteSocket = null;
-        });
-      }
-      if(encodeCallback != null) {
-        remoteSocket.add(await encodeCallback(event));
-      }
-      else {
-        remoteSocket.add(event);
-      }
-    }
-    catch(e, stackTrace) {
-      // transfer data occur error
-      onError?.call(e, stackTrace);
-    }
-  }, onError: onError ?? (e, stackTrace) {
-    // occur error
-  }, onDone: () {
-    // completed
-    remoteSubscription?.cancel();
-    remoteSocket?.destroy();
-    remoteSubscription = null;
-    remoteSocket = null;
-  });
+	Socket remoteSocket;
+	StreamSubscription remoteSubscription;
+	srcSocket.listen((List<int> event) async {
+		try {
+			if(remoteSocket == null) {
+				remoteSocket = await remoteSocketCreator();
+				remoteSubscription = remoteSocket.listen((event) async {
+					try {
+						if(decodeCallback != null) {
+							srcSocket.add(await decodeCallback(event));
+						}
+						else {
+							srcSocket.add(event);
+						}
+					}
+					catch(e, stackTrace) {
+						// transfer data occur error
+						onError?.call(e, stackTrace);
+					}
+				}, onError: onError ?? (e, stackTrace) {
+					// occur error
+				}, onDone: () {
+					remoteSubscription?.cancel();
+					remoteSubscription = null;
+					remoteSocket = null;
+				});
+			}
+			if(encodeCallback != null) {
+				remoteSocket.add(await encodeCallback(event));
+			}
+			else {
+				remoteSocket.add(event);
+			}
+		}
+		catch(e, stackTrace) {
+			// transfer data occur error
+			onError?.call(e, stackTrace);
+		}
+	}, onError: onError ?? (e, stackTrace) {
+		// occur error
+	}, onDone: () {
+		// completed
+		remoteSubscription?.cancel();
+		remoteSocket?.destroy();
+		remoteSubscription = null;
+		remoteSocket = null;
+	});
 }

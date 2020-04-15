@@ -1,12 +1,12 @@
 import '../lib/src/console_log_interface.dart';
 import '../lib/src/proxy/proxy_server.dart';
+import 'package:pedantic/pedantic.dart';
 
 void main() async {
   final server = TransportProxyServer(
       localPort: 4444,
-      remoteAddress: 'virtual-lightning.com',
-      remotePort: 80
+      remotePort: 8002
   );
   server.logInterface = ConsoleLogInterface();
-  server.startServer();
+  unawaited(server.startServer());
 }

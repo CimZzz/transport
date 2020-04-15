@@ -12,10 +12,11 @@ import '../lib/src/stream_reader.dart';
 
 
 void main() async {
-  final server = await ServerSocket.bind('127.0.0.1', 8002);
+  final file = File('/Users/wangyanxiong/Downloads/proxy.pac');
+  final bytes = await file.readAsBytes();
+  final server = await ServerSocket.bind('127.0.0.1', 80);
   await for (var socket in server) {
-    print('recv remote socket');
-    socket.add(utf8.encode('hello transport'));
-    socket.destroy();
+    socket.add(bytes);
+    socket.close();
   }
 }

@@ -12,7 +12,7 @@ class TransportProxyServer extends BaseServer {
 	@override
 	void acceptSocket(Socket socket) {
 		_transportSocket(socket, () async {
-			return Socket.connect(remoteAddress, remotePort);
+			return Socket.connect(remoteAddress ?? '127.0.0.1', remotePort);
 		}, onError: (e, [stackTrace]) {
 			logError(e, stackTrace);
 		});

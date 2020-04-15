@@ -20,28 +20,30 @@ class SocketWrapper {
 		streamReader.onDone = onDone;
 	}
 	
-	Future<Uint8List> readFromReader() {
-		return streamReader.read().timeout(Duration(seconds: 2), onTimeout: () {
+	Future<Uint8List> readFromReader(int timeOut) {
+		return streamReader.read().timeout(Duration(seconds: timeOut ?? 2), onTimeout: () {
 			throw Exception('time out, over 2 seconds not response');
 		});
 	}
 	
-	Future<Uint8List> readBytes({int length = 1}) async {
+	Future<Uint8List> readBytes({int length = 1, int timeOut}) async {
 		if(buffer == null) {
-			buffer = await readFromReader();
+			buffer = await readFromReader(timeOut);
 			if(buffer == null) {
 				throw Exception('not enough bytes');
 			}
 		}
 		while(buffer.length < length) {
-			final readByteList = await readFromReader();
+			final readByteList = await readFromReader(timeOut);
 			if(readByteList == null) {
 				throw Exception('not enough bytes');
 			}
 			buffer += readByteList;
 		}
 		if(buffer.length == length) {
-			return buffer;
+			final temp = buffer;
+			buffer = null;
+			return temp;
 		}
 		else {
 			final returnByteList = buffer.sublist(0, length);
@@ -50,27 +52,23 @@ class SocketWrapper {
 		}
 	}
 	
-	Future<int> readOneByte() async {
-		final byteList = await readBytes();
+	Future<int> readOneByte({int timeOut}) async {
+		final byteList = await readBytes(timeOut: timeOut);
 		return byteList[0];
 	}
 	
-	Future<String> readString({int length = 1}) async {
-		final byteList = await readBytes(length: length);
+	Future<String> readString({int length = 1, int timeOut}) async {
+		final byteList = await readBytes(length: length, timeOut: timeOut);
 		return String.fromCharCodes(byteList);
 	}
-	
-	Stream<Uint8List> releaseStream() {
-		if(buffer == null) {
-			return streamReader.releaseReadStream();
+
+	Stream<Uint8List> releaseStream() async* {
+		if(buffer != null) {
+			yield buffer;
 		}
-		
-		final controller = StreamController<Uint8List>();
-		controller.add(buffer);
-		controller.addStream(streamReader.releaseReadStream());
-		return controller.stream;
+		yield* streamReader.releaseReadStream();
 	}
-	
+
 	StreamSubscription _waitSubscription;
 	
 	/// Wait some second, if not activate in future, destroy it.
@@ -86,6 +84,13 @@ class SocketWrapper {
 	
 	/// Activate the socket, stop waiting...
 	void activate() {
-		_waitSubscription.cancel();
+		_waitSubscription?.cancel();
+		_waitSubscription = null;
+	}
+
+	/// destroy
+	void destroy() {
+		socket.destroy();
+		streamReader.destroy();
 	}
 }

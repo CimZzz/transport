@@ -55,4 +55,14 @@ class StreamReader<T> {
 		}
 		return _stream ?? _controller.stream;
 	}
+
+	void destroy() {
+		if(_controller.isClosed) {
+			return;
+		}
+
+		_subscription.cancel();
+		_controller.add(null);
+		_controller.close();
+	}
 }

@@ -31,14 +31,15 @@ class TransportBridge extends BaseServer{
 					if(_controlSocketMap.containsKey(topic)) {
 						// repeat control socket
 						socket.add([0xFD]);
-						socket.destroy();
+						final _ = socket.close();
 						logWarn('reapeat control socket. topic: $topic, from $address');
 					}
 					else {
-						_controlSocketMap[address] = socketWrapper;
+						_controlSocketMap[topic] = socketWrapper;
 						socketWrapper.streamReader.releaseReadStream();
 						socketWrapper.onDone = () {
 							logInfo('remove control socket. topic: $topic, from $address');
+							_controlSocketMap.remove(topic);
 						};
 						logInfo('add control socket. topic: $topic, from $address');
 						socket.add([0xFE]);
@@ -53,27 +54,40 @@ class TransportBridge extends BaseServer{
 				case 0xFE:
 					// receive new response socket
 					// check pending socket map
+					logInfo('recv response socket. topic: $topic, from $address');
 					final firstSocket = _removePendingSocket(topic, index: 0);
 					if(firstSocket != null) {
+						firstSocket.onDone = null;
 						firstSocket.activate();
-						_transportSocket(firstSocket, socketWrapper);
+						firstSocket.socket.add([0xFF]);
+						logInfo('transport socket, expect topic: $topic');
+						_transportSocket(firstSocket, socketWrapper, onError: (error, [stackTrace]) {
+							print('transport error $error');
+						});
 					}
 					else {
 						// unused response socket, closed...
+						logWarn('unused response socket, closed... topic: $topic, from $address');
 						socket.destroy();
 					}
 					break;
 				case 0xFD:
 					// receive new request socket
 					// notify control socket need provide new response socket
-					
 					final pendingList = _pendingSocketMap.putIfAbsent(topic, () => []);
 					pendingList.add(socketWrapper);
+					socketWrapper.onDone = () {
+						_removePendingSocket(topic, socketWrapper: socketWrapper);
+						logWarn('request socket closed. topic: $topic, from $address');
+					};
 					socketWrapper.wait(10, onTimeOut: (socketWrapper) {
 						_removePendingSocket(topic, socketWrapper: socketWrapper);
+						socketWrapper.onDone = null;
+						socketWrapper.destroy();
 						logWarn('request socket wait time out. topic: $topic, from $address');
 					});
 					logInfo('add request socket. topic: $topic, from $address');
+					_controlSocketMap[topic]?.socket?.add([0xFF]);
 					break;
 			}
 		}

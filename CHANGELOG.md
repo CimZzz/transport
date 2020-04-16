@@ -9,3 +9,7 @@
 ## 1.0.1
 
 - export classes.....
+
+## 1.0.2
+
+- export console_log_interface

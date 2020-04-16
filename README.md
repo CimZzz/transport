@@ -9,10 +9,6 @@ A simple usage example:
 
 ```dart
 import 'package:transport/transport.dart';
-
-main() {
-  var awesome = new Awesome();
-}
 ```
 
 ## Features and bugs

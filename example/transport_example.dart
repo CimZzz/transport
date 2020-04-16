@@ -4,8 +4,9 @@ import 'package:pedantic/pedantic.dart';
 
 void main() async {
   final server = TransportProxyServer(
-      localPort: 4444,
-      remotePort: 8002
+      localPort: 10000,
+      allowCache: false,
+      remotePort: 5037
   );
   server.logInterface = ConsoleLogInterface();
   unawaited(server.startServer());

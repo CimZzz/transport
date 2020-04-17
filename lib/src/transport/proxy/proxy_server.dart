@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-
-import '../server_base.dart';
+import '../../server_base.dart';
 
 class TransportProxyServer extends BaseServer {
 
@@ -59,6 +58,7 @@ void _transportSocket(Socket srcSocket, Future<Socket> Function() remoteSocketCr
 					}
 				}, onError: onError ?? (e, stackTrace) {
 					// occur error
+					srcSocket.destroy();
 				}, onDone: () {
 					remoteSubscription?.cancel();
 					remoteSubscription = null;
@@ -83,8 +83,6 @@ void _transportSocket(Socket srcSocket, Future<Socket> Function() remoteSocketCr
 		}
 	}, onError: onError ?? (e, stackTrace) {
 		// occur error
-		srcSocket.destroy();
-		remoteSocket?.destroy();
 	}, onDone: () {
 		// completed
 		remoteSubscription?.cancel();

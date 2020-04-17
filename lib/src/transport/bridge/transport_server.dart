@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:transport/src/bridge/socket_wrapper.dart';
+import '../../socket_wrapper.dart';
+import '../../server_base.dart';
 
-import '../server_base.dart';
-
-class TransportServer extends BaseServer {
+class TransportClientServer extends BaseServer {
 	
-	TransportServer({
+	TransportClientServer({
 		int localPort,
 		this.topic,
 		this.remoteTopic,

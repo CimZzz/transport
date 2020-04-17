@@ -1,18 +1,20 @@
-A library for Dart developers.
+# Transport
 
-Created from templates made available by Stagehand under a BSD-style
-[license](https://github.com/dart-lang/stagehand/blob/master/LICENSE).
+Create server, transport socket data to specify server
 
-## Usage
+## Import
 
-A simple usage example:
+add in pubspec.yaml, like this:
 
-```dart
-import 'package:transport/transport.dart';
+```yaml
+transport: ^1.0.4
 ```
 
-## Features and bugs
+## Transport server
 
-Please file feature requests and bugs at the [issue tracker][tracker].
+Use for data transport, As follows:
 
-[tracker]: http://example.com/issues/replaceme
+`Your connection` ->  `TransportServer` -> `RemoteServer`
+
+### Proxy Server
+

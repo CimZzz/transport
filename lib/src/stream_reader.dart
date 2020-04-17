@@ -19,7 +19,7 @@ class StreamReader<T> {
 			}
 			_controller.sink.close();
 			_subscription.cancel();
-		});
+		}, cancelOnError: true);
 	}
 	final Stream<T> _rawStream;
 	final StreamController<T> _controller = StreamController();

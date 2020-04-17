@@ -1,11 +1,7 @@
-
-
 import 'dart:async';
 import 'dart:io';
-
 import 'dart:typed_data';
-
-import '../stream_reader.dart';
+import 'stream_reader.dart';
 
 class SocketWrapper {
 	SocketWrapper(Socket socket, {void Function() onDone}):

@@ -1,6 +1,6 @@
-import '../lib/src/console_log_interface.dart';
-import '../lib/src/proxy/proxy_server.dart';
+
 import 'package:pedantic/pedantic.dart';
+import 'package:transport/transport.dart';
 
 void main() async {
   final server = TransportProxyServer(

@@ -13,6 +13,8 @@ abstract class BaseServer {
 	/// Local server socket
 	/// Listen specify port and accept socket
 	ServerSocket _serverSocket;
+	
+	/// Whether server is running
 	bool _isRunning = false;
 	
 	/// Whether the server is running

@@ -5,10 +5,12 @@ import 'package:console_cmd/console_cmd.dart';
 import 'log_interface.dart';
 
 class ConsoleLogInterface implements LogInterface {
+	const ConsoleLogInterface();
+	
 	@override
 	void logError(error, StackTrace stackTrace) {
-		ANSIPrinter()
-		..printRGB('[ERROR]: $error', fColor: 0xFF0000);
+//		ANSIPrinter()
+//		..printRGB('[ERROR]: $error', fColor: 0xFF0000);
 //		print(stackTrace);
 	}
 	

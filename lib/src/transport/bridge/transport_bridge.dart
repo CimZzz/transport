@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-import '../server_base.dart';
-import 'socket_wrapper.dart';
+import '../../server_base.dart';
+import '../../socket_wrapper.dart';
 
-class TransportBridge extends BaseServer{
-	TransportBridge({int localPort}): super(localPort: localPort);
+class TransportBridgeServer extends BaseServer{
+	TransportBridgeServer({int localPort}): super(localPort: localPort);
 	
 	final _controlSocketMap = <String, SocketWrapper>{};
 	final _pendingSocketMap = <String, List<SocketWrapper>>{};

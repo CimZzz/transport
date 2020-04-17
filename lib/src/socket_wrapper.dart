@@ -62,7 +62,7 @@ class SocketWrapper {
 		if(buffer != null) {
 			yield buffer;
 		}
-		yield* streamReader.releaseReadStream();
+		yield* streamReader.releaseStream();
 	}
 
 	StreamSubscription _waitSubscription;

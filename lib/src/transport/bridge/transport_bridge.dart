@@ -36,7 +36,7 @@ class TransportBridgeServer extends BaseServer{
 					}
 					else {
 						_controlSocketMap[topic] = socketWrapper;
-						socketWrapper.streamReader.releaseReadStream();
+						socketWrapper.streamReader.releaseStream();
 						socketWrapper.onDone = () {
 							logInfo('remove control socket. topic: $topic, from $address');
 							_controlSocketMap.remove(topic);

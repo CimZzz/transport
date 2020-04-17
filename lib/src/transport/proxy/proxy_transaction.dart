@@ -1,16 +1,16 @@
 import 'dart:io';
 import 'dart:math';
 
+import 'package:transport/src/encrypt/vl.dart';
+
 import '../../stream_transport.dart';
 import '../../log_interface.dart';
 import '../../server.dart';
 
 class ProxyTransaction extends ServerTransaction {
-	ProxyTransaction({bool allowCache, LogInterface logInterface, this.remoteAddress, this.remotePort}) :
-			allowCache = allowCache ?? true,
+	ProxyTransaction({LogInterface logInterface, this.remoteAddress, this.remotePort}) :
 			super(logInterface: logInterface);
 	
-	final bool allowCache;
 	final String remoteAddress;
 	final int remotePort;
 	
@@ -34,7 +34,7 @@ class ProxyTransaction extends ServerTransaction {
 	void handleSocket(Socket socket) async {
 		try {
 			if(needLog) {
-				logInfo('recv new socket. from ${socket.address}');
+				logInfo('recv new socket. from ${socket.address.address}');
 			}
 			// create src transport
 			final srcTransport = StreamTransport(

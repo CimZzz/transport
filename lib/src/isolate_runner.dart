@@ -13,17 +13,12 @@ class IsolateRunner {
 		final isolate = await Isolate.spawn<_IsolateBundle<T, E>>(_isolateEntryPoint, _IsolateBundle<T, E>(
 			runner: runner,
 			message: message,
-			sendPort: recvPort.sendPort
-		), errorsAreFatal: true);
+			sendPort: recvPort.sendPort,
+		), onError: recvPort.sendPort, errorsAreFatal: true);
 		final completer = Completer<E>();
-		recvPort.first.asStream().listen((event) {
-			final resultList = event as List;
-			if(resultList.length == 2) {
-				completer.completeError(resultList[0], resultList[1]);
-			}
-			else {
-				completer.complete(resultList[0]);
-			}
+		
+		recvPort.listen((event) {
+			completer.complete(event);
 		}, onError: (e, stackTrace) {
 			completer.completeError(e, stackTrace);
 		}, onDone: () {
@@ -46,11 +41,6 @@ class _IsolateBundle<T, E> {
 }
 
 void _isolateEntryPoint<T, E>(_IsolateBundle<T, E> bundle) async {
-	try {
-		final result = await bundle.apply();
-		bundle.sendPort.send([result]);
-	}
-	catch(e, stackTrace) {
-		bundle.sendPort.send([e, stackTrace]);
-	}
+	final result = await bundle.apply();
+	bundle.sendPort.send(result);
 }

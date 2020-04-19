@@ -4,15 +4,11 @@ import 'package:encrypt/encrypt.dart';
 import 'package:pointycastle/asymmetric/api.dart';
 import 'package:transport/src/isolate_runner.dart';
 
-
-
-
 /// RSA Hand shake encrypt
 class RSAHandShakeEncrypt {
 	factory RSAHandShakeEncrypt() => const RSAHandShakeEncrypt._();
 	const RSAHandShakeEncrypt._();
 
-	@override
 	Future<String> encode(RSAPublicKey publicKey, String encryptData) {
 		return IsolateRunner.execute(
 			_RSAHandShakeBundle(
@@ -23,7 +19,6 @@ class RSAHandShakeEncrypt {
 		);
 	}
 	
-	@override
 	Future<String> decode(RSAPrivateKey privateKey, String decryptData) {
 		return IsolateRunner.execute(
 			_RSAHandShakeBundle(

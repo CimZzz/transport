@@ -1,7 +1,4 @@
 import 'dart:io';
-import 'dart:math';
-
-import 'package:transport/src/encrypt/vl.dart';
 
 import '../../stream_transport.dart';
 import '../../log_interface.dart';
@@ -77,7 +74,6 @@ class ProxyTransaction extends ServerTransaction {
 					}
 				}
 			);
-			
 			
 			srcTransport.transportToTransport(remoteTransport);
 			remoteTransport.transportToTransport(srcTransport);

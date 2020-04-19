@@ -1,41 +1,40 @@
-import 'dart:async';
 import 'dart:io';
+import 'node_chain.dart';
+import 'buffer_reader.dart';
+import 'socket_writer.dart';
 
-import 'package:transport/src/buffer_reader.dart';
-import 'package:transport/src/byte_writer.dart';
-
-typedef CMDWaiter<T> = bool Function(T cmd);
-
-class SocketBundle {
-    SocketBundle(Socket socket):
-	    socket = socket,
-	    address = socket.address.address,
-	    port = socket.port,
-	    reader =  BufferReader(rawStream: socket),
-	    writer = ByteWriter(byteWrite: (List<int> dataList) {
-	    	socket?.add(dataList);
-	    });
+/// Socket bundle
+class SocketBundle<T> {
+	SocketBundle(Socket socket):
+			socket = socket,
+			address = socket.address.address,
+			port = socket.port,
+			remotePort = socket.remotePort,
+			reader =  BufferReader(rawStream: socket),
+			writer = SocketWriter(socket:  socket);
 	final Socket socket;
 	final String address;
 	final int port;
-	final ByteWriter writer;
+	final int remotePort;
+	T slot;
+	final SocketWriter writer;
 	final BufferReader reader;
-	int mixKey = 0;
-	void Function(dynamic) cmdWaiter;
-
-	Future<T> wait<T>(CMDWaiter<T> cmdWaiter) {
-		final completer = Completer<T>();
-		this.cmdWaiter = (cmd) {
-			if(cmdWaiter(cmd)) {
-				this.cmdWaiter = null;
-				completer.complete(cmd);
-			}
-		};
-		return completer.future;
+	NodeChain _socketChain;
+	var _isDestroy = false;
+	bool get isDestroy => _isDestroy;
+	
+	void addChild(SocketBundle socketBundle) {
+		_socketChain ??= NodeChain(this, onDrop: (chain) => chain.nodeData.destroy());
+		socketBundle._socketChain ??= NodeChain(socketBundle, onDrop: (chain) => chain.nodeData.destroy());
+		_socketChain.addChild(socketBundle._socketChain);
 	}
-
+	
 	void destroy() {
-		socket?.destroy();
-		reader?.destroy();
+		if(!isDestroy) {
+			_isDestroy = true;
+			_socketChain?.dropSelf();
+			reader.destroy();
+			socket?.destroy();
+		}
 	}
 }

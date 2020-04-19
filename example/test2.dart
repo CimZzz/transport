@@ -9,24 +9,18 @@ import 'package:transport/transport.dart';
 Stream<List<int>> stream() async* {
 	for(var i in [1, 2, 3, 4, 5]) {
 		yield [i];
-		await Future.delayed(Duration(milliseconds: 200));
+		await Future.delayed(Duration(seconds: 1));
 	}
 }
 
 
 void main() async {
-	final subscription = stream().listen((event) {
-		print(event);
-	}, onDone: () {
-		print('done');
-	});
-	
-	await Future.delayed(Duration(milliseconds: 400));
-	subscription.pause();
-	
-	await Future.delayed(Duration(seconds: 3));
-	print(3);
-	subscription.resume();
-	
-	await Future.delayed(Duration(seconds: 10));
+	final reader = BufferReader(rawStream: stream());
+	print(await reader.readAnyBytesList());
+	await Future.delayed(Duration(seconds: 6));
+	print(await reader.readAnyBytesList());
+	print(await reader.readAnyBytesList());
+	print(await reader.readAnyBytesList());
+	print(await reader.readAnyBytesList());
+	print(await reader.readAnyBytesList());
 }

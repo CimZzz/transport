@@ -3,10 +3,16 @@ import 'dart:io';
 
 import '../transport.dart';
 
+/// Transport Server Config
+/// About Server port configuration
+class TransportServerConfig {
+    TransportServerConfig(this.localPort);
+    
+	final int localPort;
+}
+
 /// Transport server
 class TransportServer {
-	
-	
 	
 	/// Constructor
 	/// Cannot extends it
@@ -79,8 +85,6 @@ class TransportServer {
 	}
 }
 
-
-
 /// Handle socket from server
 abstract class ServerTransaction {
 	ServerTransaction({LogInterface logInterface}):
@@ -90,7 +94,15 @@ abstract class ServerTransaction {
 	TransportServer _transportServer;
 	
 	/// Local server port getter
-	int get localPort => _transportServer.localPort;
+	int get localPort => _transportServer?.localPort;
+	
+	/// Whether local server is running
+	bool get isRunning => _transportServer?.isRunning;
+	
+	/// Destroy server
+	void destroyServer() {
+		_transportServer?.destroyServer();
+	}
 	
 	/// Whether print log
 	static bool DO_LOG = true;

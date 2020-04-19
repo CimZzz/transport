@@ -1,4 +1,4 @@
-
+/// Log interface
 abstract class LogInterface {
 	void logInfo(dynamic msg);
 	

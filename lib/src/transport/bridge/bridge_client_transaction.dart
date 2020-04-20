@@ -21,12 +21,14 @@ class BridgeClientTransaction extends ServerTransaction {
 		this.remoteTopic,
 		String transportAddress,
 		this.transportPort,
+		bool isCustomTransport,
 		this.bridgeAddress,
 		this.bridgePort,
 		this.rsaPublicKeyPath,
 		String rsaMagicWord,
 	})
 		: transportAddress = transportAddress ?? '127.0.0.1',
+			isCustomTransport = isCustomTransport ?? false,
 			rsaMagicWord = rsaMagicWord ?? 'virtual-lightning.com',
 			super(logInterface: logInterface);
 	
@@ -41,6 +43,9 @@ class BridgeClientTransaction extends ServerTransaction {
 	
 	/// Transport port
 	final int transportPort;
+
+	/// Support Custom Transport
+	final bool isCustomTransport;
 	
 	/// Bridge server address
 	final String bridgeAddress;
@@ -197,9 +202,11 @@ class BridgeClientTransaction extends ServerTransaction {
 				requestSocket.destroy();
 				return;
 			}
+			final srcSocketBundle = BridgeSocketBundle(socket);
 			_controlSocket.addChild(requestSocket);
+			requestSocket.addChild(srcSocketBundle);
 			// add socket to slot
-			requestSocket.slot.proxySocket = socket;
+			requestSocket.slot.proxySocket = srcSocketBundle;
 			// when request socket close, the local socket also close too
 			final topicLength = topic.codeUnits.length;
 			final remoteTopicLength = remoteTopic.codeUnits.length;
@@ -237,14 +244,6 @@ class BridgeClientTransaction extends ServerTransaction {
 		BridgeSocketBundle responseSocket;
 		try {
 			responseSocket = BridgeSocketBundle(await Socket.connect(bridgeAddress, bridgePort));
-			if (!_isControlConnected) {
-				// control socket disconnected, destroy socket
-				responseSocket.destroy();
-				return;
-			}
-			final socket = await Socket.connect(transportAddress, transportPort);
-			// add socket to slot
-			responseSocket.slot.proxySocket = socket;
 			if (!_isControlConnected) {
 				// control socket disconnected, destroy socket
 				responseSocket.destroy();
@@ -453,27 +452,41 @@ class BridgeClientTransaction extends ServerTransaction {
 				break;
 				
 			case BridgeServerCode.TransportRequest:
-				final socketBundle = _pickPendingTransportSocket(command.message);
+				final socketBundle = _pickPendingTransportSocket(command.message[0]);
 				if (socketBundle == null) {
 					// socket not exists
 					return;
 				}
-				_transportSocket(socketBundle);
-				if (needLog) {
-					logInfo('transporting request socket...');
+				final keyInt = int.tryParse(command.message[1]);
+				if(keyInt == null) {
+					socketBundle.destroy();
+					if(needLog) {
+						logWrong('invalid mix key from request socket');
+					}
+					return;
 				}
+
+				socketBundle.slot.mixKey = MixKey(keyInt);
+				_transportSocket(socketBundle);
 				break;
 				
 			case BridgeServerCode.TransportResponse:
-				final socketBundle = _pickPendingTransportSocket(command.message);
+				final socketBundle = _pickPendingTransportSocket(command.message[0]);
 				if (socketBundle == null) {
 					// socket not exists
 					return;
 				}
-				_transportSocket(socketBundle);
-				if (needLog) {
-					logInfo('transporting response socket...');
+				final keyInt = int.tryParse(command.message[1]);
+				if(keyInt == null) {
+					socketBundle.destroy();
+					if(needLog) {
+						logWrong('invalid mix key from response socket');
+					}
+					return;
 				}
+
+				socketBundle.slot.mixKey = MixKey(keyInt);
+				_transportSocket(socketBundle);
 				break;
 			default:
 				// unreachable
@@ -482,7 +495,11 @@ class BridgeClientTransaction extends ServerTransaction {
 	}
 	
 	/// Start Timer to change mix key
-	void _beginMixKeyTimer() {
+	void _beginMixKeyTimer() async {
+		if(!_isControlConnected) {
+			return;
+		}
+
 		_mixKeyTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
 			// change mix key
 			final newKey = Random().nextInt(0xFFFFFFFF);
@@ -513,7 +530,7 @@ class BridgeClientTransaction extends ServerTransaction {
 	
 	
 	/// Transport request socket and response socket
-	void _transportSocket(BridgeSocketBundle socketBundle) {
+	void _transportSocket(BridgeSocketBundle socketBundle) async {
 		socketBundle.slot.onDestroy = (bundle) {
 			if(needLog) {
 				if(bundle.slot.isRequest) {
@@ -524,6 +541,66 @@ class BridgeClientTransaction extends ServerTransaction {
 				}
 			}
 		};
+
+		try {
+			if(socketBundle.slot.isRequest) {
+				// from request
+				if(isCustomTransport) {
+					socketBundle.writer.writeByte(0x01, mixKey: socketBundle.slot.mixKey);
+					final srcSocketBundle = socketBundle.slot.proxySocket;
+					final hostLength = await srcSocketBundle.reader.readOneByte(timeOut: 2);
+					final host = await srcSocketBundle.reader.readString(length: hostLength, timeOut: 5);
+					final port = await srcSocketBundle.reader.readOneInt(timeOut: 2);
+					socketBundle.writer.writeByte(hostLength, mixKey: socketBundle.slot.mixKey);
+					socketBundle.writer.writeString(host, mixKey: socketBundle.slot.mixKey);
+					socketBundle.writer.writeInt(port, mixKey: socketBundle.slot.mixKey);
+				}
+				else {
+					socketBundle.writer.writeByte(0x00, mixKey: socketBundle.slot.mixKey);
+				}
+				socketBundle.writer.flush();
+				if (needLog) {
+					logInfo('transporting request socket...');
+				}
+			}
+			else {
+				final mode = await socketBundle.reader.readOneByte(mixKey: socketBundle.slot.mixKey, timeOut: 2);
+				String host;
+				int port;
+				if(mode == 0x01) {
+					final hostLength = await socketBundle.reader.readOneByte(mixKey: socketBundle.slot.mixKey, timeOut: 2);
+					host = await socketBundle.reader.readString(length: hostLength, mixKey: socketBundle.slot.mixKey, timeOut: 5);
+					port = await socketBundle.reader.readOneInt(mixKey: socketBundle.slot.mixKey, timeOut: 2);
+				}
+				else {
+					host = transportAddress;
+					port = transportPort;
+				}
+				final socket = await Socket.connect(host, port);
+				if(!_isControlConnected) {
+					socket.destroy();
+					return;
+				}
+				final remoteSocketBundle = BridgeSocketBundle(socket);
+				socketBundle.addChild(remoteSocketBundle);
+				socketBundle.slot.proxySocket = remoteSocketBundle;
+
+				if (needLog) {
+					logInfo('transporting response socket to ${host}:${port}');
+				}
+			}
+		}
+		catch(error, stackTrace) {
+			if (needLog) {
+				logWrong('transporting socket error $e...');
+				logError(error, stackTrace);
+			}
+			socketBundle.destroy();
+			return;
+		}
+
+
+
 		// create transport
 		final requestTransport = StreamTransport(
 			socketBundle.reader.releaseStream(),
@@ -541,14 +618,14 @@ class BridgeClientTransaction extends ServerTransaction {
 		
 		// create response transport
 		final responseTransport = StreamTransport(
-			socketBundle.slot.proxySocket,
+			socketBundle.slot.proxySocket.reader.releaseStream(),
 			bindData: socketBundle,
 			streamDone: (transport, otherTransport) {
 				transport.slot.destroy();
 				otherTransport?.destroy();
 			},
 			recvStreamData: (transport, List<int> data) {
-				socketBundle.slot.proxySocket.add(data);
+				socketBundle.slot.proxySocket.socket.add(data);
 				return;
 			},
 			streamError: (transport, e, [stackTrace]) {}

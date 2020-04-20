@@ -1,6 +1,9 @@
+import 'dart:math';
+
 /// Mix key
 /// Use for byte confusion
 class MixKey {
+	factory MixKey.random() => MixKey(Random().nextInt(0xFFFFFFFF));
 	MixKey(int baseKey)
 		:baseKey = baseKey,
 			keyList = [

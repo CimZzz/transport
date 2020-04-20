@@ -118,7 +118,6 @@ class BridgeServerTransaction extends ServerTransaction {
 	/// Fetch and remote from pending verify request socket map
 	BridgeSocketBundle _pickPendingRequest(String topic, String reqKey) {
 		final map = _pendingVerifyReqSocketMap[topic];
-		print(_pendingVerifyReqSocketMap);
 		if (map != null) {
 			final socketBundle = map.remove(reqKey);
 			if (socketBundle != null) {
@@ -594,18 +593,19 @@ class BridgeServerTransaction extends ServerTransaction {
 					return;
 				}
 				final requestControlSocket = _controlSocketMap[reqSocketBundle.slot.topic];
-				
+				final newMixKey = MixKey.random();
+
 				requestControlSocket.writeCommand(BridgeServerCommand(
 					code: BridgeServerCode.TransportRequest,
-					message: reqSocketBundle.slot.reqKey,
+					message: [reqSocketBundle.slot.reqKey, newMixKey.baseKey.toString()]
 				));
 				socketBundle.writeCommand(BridgeServerCommand(
 					code: BridgeServerCode.TransportResponse,
-					message: resSocketBundle.slot.reqKey,
+					message: <String>[resSocketBundle.slot.reqKey, newMixKey.baseKey.toString()],
 				));
 				_transportSocket(reqSocketBundle, resSocketBundle);
 				break;
-				
+
 			case BridgeClientCode.ResponseSocketReplyFailure:
 				final resSocketBundle = _pickPendingResponse(
 					socketBundle.slot.topic,

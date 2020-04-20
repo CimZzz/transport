@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:transport/transport.dart';
 
@@ -10,13 +9,21 @@ import '../../server.dart';
 import '../../socket_bundle.dart';
 
 class HttpProxyTransaction extends ServerTransaction {
-	HttpProxyTransaction({LogInterface logInterface}) :
+	HttpProxyTransaction({
+		LogInterface logInterface,
+		String bridgeClientAddress,
+		int bridgeClientPort
+	}) : clientAddress = bridgeClientAddress ?? (bridgeClientPort != null ? '127.0.0.1' : null),
+			clientPort = bridgeClientPort ?? (bridgeClientAddress != null ? 80 : null),
 			super(logInterface: logInterface);
-	
+
+	final String clientAddress;
+	final int clientPort;
+
 	@override
 	Future<void> onAfterServerStarted() {
 		if(needLog) {
-			logInfo('Proxy server start. Listen on $localPort');
+			logInfo('Http Proxy server start. Listen on $localPort');
 		}
 		return super.onAfterServerStarted();
 	}
@@ -24,7 +31,7 @@ class HttpProxyTransaction extends ServerTransaction {
 	@override
 	Future<void> onAfterServerClosed() {
 		if(needLog) {
-			logInfo('Proxy server closed.');
+			logInfo('Http Proxy server closed.');
 		}
 		return super.onAfterServerClosed();
 	}
@@ -72,9 +79,19 @@ class HttpProxyTransaction extends ServerTransaction {
 						break;
 					}
 				}
-				
-				remoteSocketBundle = SocketBundle(await Socket.connect(host, port));
-				socketBundle.addChild(remoteSocketBundle);
+
+				if(clientAddress != null && clientPort != null) {
+					remoteSocketBundle = SocketBundle(await Socket.connect(clientAddress, clientPort));
+					socketBundle.addChild(remoteSocketBundle);
+					remoteSocketBundle.writer.writeByte(host.codeUnits.length);
+					remoteSocketBundle.writer.writeString(host);
+					remoteSocketBundle.writer.writeInt(port);
+				}
+				else {
+					remoteSocketBundle = SocketBundle(await Socket.connect(host, port));
+					socketBundle.addChild(remoteSocketBundle);
+				}
+
 				socketBundle.writer.writeString('HTTP/1.1 200 Connection Established\r\n\r\n');
 				socketBundle.writer.flush();
 			}
@@ -99,9 +116,19 @@ class HttpProxyTransaction extends ServerTransaction {
 				if(port == null) {
 					throw Exception('unknow port ${hostPortStr[1]}');
 				}
-				
-				remoteSocketBundle = SocketBundle(await Socket.connect(host, port));
-				socketBundle.addChild(remoteSocketBundle);
+
+				if(clientAddress != null && clientPort != null) {
+					remoteSocketBundle = SocketBundle(await Socket.connect(clientAddress, clientPort));
+					socketBundle.addChild(remoteSocketBundle);
+					remoteSocketBundle.writer.writeByte(host.codeUnits.length);
+					remoteSocketBundle.writer.writeString(host);
+					remoteSocketBundle.writer.writeInt(port);
+				}
+				else {
+					remoteSocketBundle = SocketBundle(await Socket.connect(host, port));
+					socketBundle.addChild(remoteSocketBundle);
+				}
+
 				remoteSocketBundle.writer.writeByteList(byteList);
 				remoteSocketBundle.writer.writeByte('\n'.codeUnitAt(0));
 				// read remained header, and post to remote socket
@@ -123,7 +150,6 @@ class HttpProxyTransaction extends ServerTransaction {
 					otherTransport?.destroy();
 				},
 				recvStreamData: (srcTransport, List<int> data) {
-					logInfo(utf8.decode(data));
 					srcTransport.slot.socket.add(data);
 					return;
 				},

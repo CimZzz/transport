@@ -20,7 +20,7 @@ class BridgeSlot {
 	
 	void Function(BridgeSocketBundle socketBundle) onDestroy;
 	
-	Socket proxySocket;
+	BridgeSocketBundle proxySocket;
 }
 
 class BridgeSocketBundle extends SocketBundle<BridgeSlot> {
@@ -69,6 +69,7 @@ class BridgeSocketBundle extends SocketBundle<BridgeSlot> {
 		    slot.onDestroy?.call(this);
 		    slot.onDestroy = null;
 		    slot.proxySocket?.destroy();
+		    slot.proxySocket = null;
 		    super.destroy();
 	    }
     }

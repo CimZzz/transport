@@ -17,3 +17,14 @@
 ## 1.0.3
 
 - allow proxy server select cache...
+
+## 1.0.4
+
+- refactor all... provide transport server as follows:
+
+    1. HttpProxyServer
+    2. ProxyServer
+    3. BridgeClientServer
+    4. BridgeServer
+    
+- Bridge Server can use RSA crypt at hand-shake step.

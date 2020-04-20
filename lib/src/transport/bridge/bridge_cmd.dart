@@ -27,6 +27,7 @@ enum BridgeServerCode {
 enum _BridgeMessageType {
 	INT,
 	STRING,
+	STRING_LIST,
 	BYTE,
 	NONE,
 }
@@ -54,9 +55,10 @@ _BridgeMessageType _getMessageType(dynamic commandCode) {
 			case BridgeServerCode.RequestSocketConfirm:
 			case BridgeServerCode.RequestUnknownTopic:
 			case BridgeServerCode.ResponseSocketConfirm:
+				return _BridgeMessageType.STRING;
 			case BridgeServerCode.TransportRequest:
 			case BridgeServerCode.TransportResponse:
-				return _BridgeMessageType.STRING;
+				return _BridgeMessageType.STRING_LIST;
 		}
 	}
 	return null;
@@ -70,6 +72,8 @@ bool _checkMessageValid(_BridgeMessageType type, dynamic msg) {
 			return msg is int;
 		case _BridgeMessageType.STRING:
 			return msg is String;
+		case _BridgeMessageType.STRING_LIST:
+			return msg is List<String>;
 		case _BridgeMessageType.BYTE:
 			return msg is int;
 		case _BridgeMessageType.NONE:
@@ -104,6 +108,13 @@ abstract class BridgeCommand {
 			case _BridgeMessageType.STRING:
 				byteWriter.writeInt(message.codeUnits.length, mixKey: mixKey);
 				byteWriter.writeString(message, mixKey: mixKey);
+				break;
+			case _BridgeMessageType.STRING_LIST:
+				byteWriter.writeInt(message.length, mixKey: mixKey);
+				for(String str in message) {
+					byteWriter.writeInt(str.codeUnits.length, mixKey: mixKey);
+					byteWriter.writeString(str, mixKey: mixKey);
+				}
 				break;
 			case _BridgeMessageType.BYTE:
 				byteWriter.writeByte(message, mixKey: mixKey);
@@ -169,6 +180,17 @@ Stream<T> transformBridgeStream<T extends BridgeCommand>({Stream<List<int>> data
 						mixKey: mixKey, timeOut: 2);
 					message = await reader.readString(
 						length: msgLength, mixKey: mixKey, timeOut: 5);
+					break;
+				case _BridgeMessageType.STRING_LIST:
+					final listLength = await reader.readOneInt(mixKey: mixKey, timeOut: 2);
+					message = List<String>(listLength);
+					for(var i = 0 ; i < listLength ; i ++) {
+						final strLength = await reader.readOneInt(
+							mixKey: mixKey, timeOut: 2);
+						final str = await reader.readString(
+							length: strLength, mixKey: mixKey, timeOut: 5);
+						message[i] = str;
+					}
 					break;
 				case _BridgeMessageType.BYTE:
 					message = await reader.readOneByte(mixKey: mixKey, timeOut: 2);

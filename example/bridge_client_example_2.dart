@@ -13,7 +13,7 @@ void main() {
       transportPort: 80,
       bridgeAddress: '127.0.0.1',
       bridgePort: 9000,
-      rsaPublicKeyPath: '/Users/cimzzz/Documents/IDEAProjects/transport/rsa_public_key.pem',
+      rsaPublicKeyPath: '/Users/wangyanxiong/Documents/IDEAProject/transport/rsa_public_key.pem',
     )
   ).startServer();
 }

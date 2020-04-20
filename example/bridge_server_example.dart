@@ -8,7 +8,7 @@ void main() {
 		localPort: 9000,
 		transaction: BridgeServerTransaction(
 			logInterface: const ConsoleLogInterface(),
-			rsaPrivateKeyPath: '/Users/cimzzz/Documents/IDEAProjects/transport/rsa_private_key.pem',
+			rsaPrivateKeyPath: '/Users/wangyanxiong/Documents/IDEAProject/transport/rsa_private_key.pem',
 		)
 	).startServer();
 }

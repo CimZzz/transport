@@ -7,7 +7,7 @@ Create server, transport socket data to specify server
 add in pubspec.yaml, like this:
 
 ```yaml
-transport: ^1.0.4
+transport: ^1.0.5
 ```
 
 ## Transport server

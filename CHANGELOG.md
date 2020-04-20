@@ -28,3 +28,7 @@
     4. BridgeServer
     
 - Bridge Server can use RSA crypt at hand-shake step.
+
+## 1.0.5
+
+- export HttpProxyServer

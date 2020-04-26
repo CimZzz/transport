@@ -276,6 +276,7 @@ class BridgeServerTransaction extends ServerTransaction {
 			// control socket topic
 			String topic;
 			var mixKey = 0;
+			bool doTransport;
 			
 			switch (cryptType) {
 			// 00 - represent no crypt
@@ -285,6 +286,7 @@ class BridgeServerTransaction extends ServerTransaction {
 					topic = await socketBundle.reader.readString(
 						length: topicLength, timeOut: 5);
 					mixKey = await socketBundle.reader.readOneInt(timeOut: 2);
+					doTransport = (await socketBundle.reader.readOneByte(timeOut: 2)) == 0x01;
 					break;
 			// 01 - represent RSA crypt
 				case 0x01:
@@ -328,6 +330,7 @@ class BridgeServerTransaction extends ServerTransaction {
 					topic = decodeStr.substring(rsaMagicWord.length + 1,
 						rsaMagicWord.length + 1 + topicLength);
 					mixKey = await socketBundle.reader.readOneInt(timeOut: 2);
+					doTransport = (await socketBundle.reader.readOneByte(timeOut: 2)) == 0x01;
 					break;
 				default:
 				// unknown crypt type
@@ -352,6 +355,7 @@ class BridgeServerTransaction extends ServerTransaction {
 			
 			socketBundle.slot.topic = topic;
 			socketBundle.slot.mixKey = MixKey(mixKey);
+			socketBundle.slot.doTransport = doTransport;
 			
 			// Build command stream, recv from client
 			socketBundle.watchStream(transformBridgeStream<BridgeClientCommand>(
@@ -529,6 +533,15 @@ class BridgeServerTransaction extends ServerTransaction {
 						reqSocketBundle.destroy();
 						if (needLog) {
 							logWrong('request socket don\'t found corresponding topic. topic: ${reqSocketBundle.slot.topic}, '
+								'from ${reqSocketBundle.address} specify topic: $topic');
+						}
+						return;
+					}
+					if(corControlSocket.slot.doTransport != true) {
+						// destroy request, because control socket does not support transport request
+						reqSocketBundle.destroy();
+						if (needLog) {
+							logWarn('control socket doesn\'t support transport. topic: ${reqSocketBundle.slot.topic}, '
 								'from ${reqSocketBundle.address} specify topic: $topic');
 						}
 						return;

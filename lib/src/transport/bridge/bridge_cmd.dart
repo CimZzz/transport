@@ -9,6 +9,7 @@ enum BridgeClientCode {
 	RequestSocketReplyFailure,
 	ResponseSocketReplySuccess,
 	ResponseSocketReplyFailure,
+	UnsupportedResponse,
 }
 
 /// Bridge client command code
@@ -42,6 +43,7 @@ _BridgeMessageType _getMessageType(dynamic commandCode) {
 			case BridgeClientCode.RequestSocketReplyFailure:
 			case BridgeClientCode.ResponseSocketReplySuccess:
 			case BridgeClientCode.ResponseSocketReplyFailure:
+			case BridgeClientCode.UnsupportedResponse:
 				return _BridgeMessageType.STRING;
 		}
 	}

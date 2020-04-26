@@ -1,7 +1,4 @@
-import 'package:transport/src/console_log_interface.dart';
-import 'package:transport/src/server.dart';
-import 'package:transport/src/transport/bridge/bridge_client_transaction.dart';
-import 'package:transport/src/transport/bridge/bridge_server_transaction.dart';
+import 'package:transport/transport.dart';
 
 void main() {
 	TransportServer(

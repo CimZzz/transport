@@ -20,7 +20,7 @@ class BridgeClientTransaction extends ServerTransaction {
 		this.topic,
 		this.remoteTopic,
 		String transportAddress,
-		this.transportPort,
+		int transportPort,
 		bool isCustomTransport,
 		this.bridgeAddress,
 		this.bridgePort,
@@ -28,7 +28,9 @@ class BridgeClientTransaction extends ServerTransaction {
 		String rsaMagicWord,
 	})
 		: transportAddress = transportAddress ?? '127.0.0.1',
+			transportPort = transportPort ?? 80,
 			isCustomTransport = isCustomTransport ?? false,
+			doTransport = transportAddress != null || transportPort != null || isCustomTransport != null,
 			rsaMagicWord = rsaMagicWord ?? 'virtual-lightning.com',
 			super(logInterface: logInterface);
 	
@@ -46,6 +48,9 @@ class BridgeClientTransaction extends ServerTransaction {
 
 	/// Support Custom Transport
 	final bool isCustomTransport;
+
+	/// Represent this client whether do transport
+	final bool doTransport;
 	
 	/// Bridge server address
 	final String bridgeAddress;
@@ -292,12 +297,14 @@ class BridgeClientTransaction extends ServerTransaction {
 			_controlSocket.writer.writeByte(_controlHandShakeEncryptType);
 			final topicCodeUnits = topic.codeUnits;
 			final topicLength = topicCodeUnits.length;
+			//  will send self-topic, MixKey and doTransport
 			switch (_controlHandShakeEncryptType) {
 				case 0x00:
 				// no crypt, pass topic and mixKey
 					_controlSocket.writer.writeByte(topicLength);
 					_controlSocket.writer.writeByteList(topicCodeUnits);
 					_controlSocket.writer.writeInt(_controlSocket.slot.mixKey.baseKey);
+					_controlSocket.writer.writeByte(doTransport ? 0x01 : 0x00);
 					break;
 				case 0x01:
 				// use RSA encrypt
@@ -314,6 +321,7 @@ class BridgeClientTransaction extends ServerTransaction {
 					_controlSocket.writer.writeInt(encodeStrLength);
 					_controlSocket.writer.writeString(encodeStr);
 					_controlSocket.writer.writeInt(_controlSocket.slot.mixKey.baseKey);
+					_controlSocket.writer.writeByte(doTransport ? 0x01 : 0x00);
 					break;
 				default:
 					isFinished = true;

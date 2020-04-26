@@ -10,6 +10,7 @@ class BridgeSlot {
 	String topic;
 	String subscribeTopic;
 	String reqKey;
+	bool doTransport;
 	bool isRequest;
 	MixKey mixKey;
 	

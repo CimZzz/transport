@@ -9,9 +9,9 @@ class ConsoleLogInterface implements LogInterface {
 	
 	@override
 	void logError(error, StackTrace stackTrace) {
-		ANSIPrinter()
-		..printRGB('[ERROR]: $error', fColor: 0xFF0000);
-		print(stackTrace);
+//		ANSIPrinter()
+//		..printRGB('[ERROR]: $error', fColor: 0xFF0000);
+//		print(stackTrace);
 	}
 	
 	@override

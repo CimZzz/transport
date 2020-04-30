@@ -16,16 +16,19 @@ class TransportServer {
 	
 	/// Constructor
 	/// Cannot extends it
-	factory TransportServer({int localPort, ServerTransaction transaction}) =>
-		TransportServer._(localPort: localPort, transaction: transaction);
+	factory TransportServer({int localPort, bool isLocal, ServerTransaction transaction}) =>
+		TransportServer._(localPort: localPort, isLocal: isLocal ?? false, transaction: transaction);
 	
-	TransportServer._({this.localPort, ServerTransaction transaction})
+	TransportServer._({this.localPort, this.isLocal, ServerTransaction transaction})
 		: _transaction = transaction {
 		transaction._transportServer = this;
 	}
 	
 	/// Local server bind
 	final int localPort;
+
+	/// Intranet access only
+	final bool isLocal;
 	
 	/// Server transaction
 	final ServerTransaction _transaction;
@@ -47,7 +50,7 @@ class TransportServer {
 		}
 		_isRunning = true;
 		await _transaction.onBeforeServerStart();
-		_serverSocket = await ServerSocket.bind('127.0.0.1', localPort);
+		_serverSocket = await ServerSocket.bind(isLocal ? '127.0.0.1' : '0.0.0.0', localPort);
 		_serverSocket.listen((socket) async {
 			acceptSocket(socket);
 		}, onError: (e, stackTrace) {
@@ -74,7 +77,7 @@ class TransportServer {
 		return;
 	}
 	
-	/// Close server
+	/// Destroy server
 	void destroyServer() {
 		closeServer();
 	}

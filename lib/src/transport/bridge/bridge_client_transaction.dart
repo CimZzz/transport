@@ -22,6 +22,9 @@ class BridgeClientTransaction extends ServerTransaction {
 		String transportAddress,
 		int transportPort,
 		bool isCustomTransport,
+		String peerAddress,
+		int peerPort,
+		bool isPeerCustomTransport,
 		this.bridgeAddress,
 		this.bridgePort,
 		this.rsaPublicKeyPath,
@@ -30,6 +33,9 @@ class BridgeClientTransaction extends ServerTransaction {
 		: transportAddress = transportAddress ?? '127.0.0.1',
 			transportPort = transportPort ?? 80,
 			isCustomTransport = isCustomTransport ?? false,
+			peerAddress = peerAddress ?? '127.0.0.1',
+			peerPort = peerPort ?? 80,
+			isPeerCustomTransport = isPeerCustomTransport ?? false,
 			doTransport = transportAddress != null || transportPort != null || isCustomTransport != null,
 			rsaMagicWord = rsaMagicWord ?? 'virtual-lightning.com',
 			super(logInterface: logInterface);
@@ -48,6 +54,15 @@ class BridgeClientTransaction extends ServerTransaction {
 
 	/// Support Custom Transport
 	final bool isCustomTransport;
+
+	/// Peer address
+	final String peerAddress;
+
+	/// Peer port
+	final int peerPort;
+
+	/// Peer Support Custom Transport
+	final bool isPeerCustomTransport;
 
 	/// Represent this client whether do transport
 	final bool doTransport;
@@ -166,7 +181,7 @@ class BridgeClientTransaction extends ServerTransaction {
 	@override
 	Future<void> onAfterServerStarted() {
 		if (needLog) {
-			logInfo('Bridge server start. Listen on $localPort');
+			logInfo('Bridge Client server start. Listen on $localPort');
 		}
 		_connectControlSocket();
 		return super.onAfterServerStarted();
@@ -178,7 +193,7 @@ class BridgeClientTransaction extends ServerTransaction {
 	Future<void> onAfterServerClosed() {
 		_destroyControlSocket();
 		if (needLog) {
-			logInfo('Bridge server closed.');
+			logInfo('Bridge Client server closed.');
 		}
 		return super.onAfterServerClosed();
 	}
@@ -562,6 +577,12 @@ class BridgeClientTransaction extends ServerTransaction {
 					socketBundle.writer.writeByte(hostLength, mixKey: socketBundle.slot.mixKey);
 					socketBundle.writer.writeString(host, mixKey: socketBundle.slot.mixKey);
 					socketBundle.writer.writeInt(port, mixKey: socketBundle.slot.mixKey);
+				}
+				else if(isPeerCustomTransport) {
+					socketBundle.writer.writeByte(0x01, mixKey: socketBundle.slot.mixKey);
+					socketBundle.writer.writeByte(peerAddress.codeUnits.length, mixKey: socketBundle.slot.mixKey);
+					socketBundle.writer.writeString(peerAddress, mixKey: socketBundle.slot.mixKey);
+					socketBundle.writer.writeInt(peerPort, mixKey: socketBundle.slot.mixKey);
 				}
 				else {
 					socketBundle.writer.writeByte(0x00, mixKey: socketBundle.slot.mixKey);

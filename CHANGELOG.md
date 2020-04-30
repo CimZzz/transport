@@ -32,3 +32,9 @@
 ## 1.0.5
 
 - export HttpProxyServer
+
+## 1.0.6
+
+- allow bridge client specify peer address & port
+- allow bridge client refuse response.
+- fix intranet not access problem

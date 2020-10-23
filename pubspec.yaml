@@ -10,6 +10,7 @@ dependencies:
   encrypt: ^4.0.0
   pointycastle: ^1.0.2
   console_cmd: ^1.0.5
+  stream_data_reader: ^1.0.5
 
 dev_dependencies:
   pedantic: ^1.8.0

@@ -5,10 +5,23 @@ import 'socket_bundle.dart';
 
 /// Server 2 Client, hand shake resp
 class HandShakeRespStep extends BaseSocketBundleStep<bool> {
-	HandShakeRespStep(SocketBundle socketBundle, {this.registerClientCallback}) : super(socketBundle, Duration(seconds: 10));
+	HandShakeRespStep(SocketBundle socketBundle, {this.registerClientCallback, this.checkClientCallback, this.constructRequestCallback, this.constructResponseCallback}) : super(socketBundle, Duration(seconds: 10));
 
+	/// 注册 Client 回调
 	final bool Function(SocketBundle, String) registerClientCallback;
 
+	/// 检查是否存在对应 Client 回调
+	final bool Function(String) checkClientCallback;
+
+	/// 构建请求连接回调
+	final bool Function(SocketBundle, int) constructRequestCallback;
+
+	/// 构建响应连接回调
+	final bool Function(SocketBundle, int) constructResponseCallback;
+
+	/// Socket 握手
+	/// 如果成功返回 true
+	/// 失败返回 false 或抛出 exception
 	@override
 	Future<bool> onStepAction() async {
 		final socket = socketBundle.socket;
@@ -45,15 +58,113 @@ class HandShakeRespStep extends BaseSocketBundleStep<bool> {
 		// 0 - 控制 Socket
 		// 1 - Request Socket
 		// 2 - Response Socket
+		final socketType = await reader.readOneByte() & 0xFF;
+		if(socketType < 0 || socketType > 2) {
+			// 类型错误
+			return false;
+		}
+		socketBundle.socketType = socketType;
 
-		// 第四步，也是最后一步，接收对端发送而来的 Client Id，查看是否可以注册
+		// 第五步，接收对端发送而来的 Client Id，检查来源
 		final clientIdLength = await reader.readOneByte() & 0xFF;
 		final clientIdBytes = socketBundle.decryptFunc(socketBundle, await reader.readBytes(length: clientIdLength));
 		final clientId = utf8.decode(clientIdBytes);
-		if(registerClientCallback(socketBundle, clientId)) {
-			socketBundle.clientId = clientId;
-			return true;
+		socketBundle.clientId = clientId;
+
+		// 第六步，根据 Socket 类型分开处理
+		switch(socketType) {
+			// 控制 Socket 类型
+			case kSocketTypeControl: {
+				// 绑定控制套接字
+				if(!registerClientCallback(socketBundle, clientId)) {
+					// 绑定失败，返回 false
+					return false;
+				}
+				break;
+			}
+
+			// 请求 Socket 类型
+			case kSocketTypeRequest: {
+				// 查询请求 Socket 对应 Client Id 是否存在
+				if(!checkClientCallback(clientId)) {
+					// 对应控制套接字已经不存在了，断开
+					return false;
+				}
+
+				// 接收标记码，该码由 Server 指定，用来在请求/响应 Socket 之间建立联系
+				final flagCode = await reader.readOneByte() & 0xFF;
+
+				if(!constructRequestCallback(socketBundle, flagCode)) {
+					// 匹配标记码失败，返回 false
+					return false;
+				}
+				break;
+			}
+
+			// 响应 Socket 类型
+			case kSocketTypeResponse: {
+				// 查询响应 Socket 对应 Client Id 是否存在
+				if(!checkClientCallback(clientId)) {
+					// 对应控制套接字已经不存在了，断开
+					return false;
+				}
+
+				// 接收标记码，该码由 Server 指定，用来在请求/响应 Socket 之间建立联系
+				final flagCode = await reader.readOneByte() & 0xFF;
+
+				if(!constructResponseCallback(socketBundle, flagCode)) {
+					// 匹配标记码失败，返回 false
+					return false;
+				}
+				break;
+			}
 		}
-		return false;
+
+		// 第七步，发送建立成功响应
+		socket.add([250]);
+		await socket.flush();
+
+		return true;
+	}
+}
+
+/// Bridge Command
+class BridgeCommand {
+	BridgeCommand._();
+
+	/// Send heartbeat
+	///
+	///   0 1 2 3 4 5 6 7
+	/// + - - - - - - - -
+	/// |      type      |
+	/// + - - - - - - - -
+	///
+	/// type: int, 8 bits (1 bytes) , always 0x00
+	///
+	Future<void> sendHeartbeatTick(SocketBundle socketBundle) async {
+		socketBundle.socket.add([0x00]);
+		await socketBundle.socket.flush();
+	}
+
+	/// When control socket ask for another control socket, via server
+	/// send request transfer.
+	///
+	///
+	///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+	/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+	/// |      type      |   replyIdx    |             port               |
+	/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+	///
+	/// type: int, 8 bits (1 bytes) , always 0x02
+	/// replyIdx: int, 8 bits (1 bytes) , reply idx, use to match command req & res
+	/// port: int, 16 bits (2 bytes) , peer client want to access specify port
+	///
+	Future<void> sendRequestTransfer(SocketBundle socketBundle, int port) async {
+		final bytesList = <int>[];
+		bytesList.add(0x01);
+		bytesList.add(port & 0xFF);
+		bytesList.add((port >> 8) & 0xFF);
+		socketBundle.socket.add(bytesList);
+		await socketBundle.socket.flush();
 	}
 }

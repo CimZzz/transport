@@ -5,7 +5,12 @@ import 'socket_bundle.dart';
 
 /// Client 2 Server, hand shake req
 class HandShakeReqStep extends BaseSocketBundleStep<bool> {
-    HandShakeReqStep(SocketBundle socketBundle) : super(socketBundle, Duration(seconds: 10));
+    HandShakeReqStep(SocketBundle socketBundle, {this.socketType, this.flagCode}) : super(socketBundle, Duration(seconds: 10));
+
+    /// Socket 类型
+    final int socketType;
+    final int flagCode;
+
 
 	@override
 	Future<bool> onStepAction() async {
@@ -40,15 +45,130 @@ class HandShakeReqStep extends BaseSocketBundleStep<bool> {
 			return false;
 		}
 
+		// 第四步，写入 Socket 类型
+		// 0 - 控制 Socket
+		// 1 - Request Socket
+		// 2 - Response Socket
+		if(socketType < 0 || socketType > 2) {
+			// 类型错误
+			return false;
+		}
+		socket.add([socketType]);
 
-		// 第四步，发送 Client Id
+		// 第五步，发送 Client Id
 		final clientIdBytes = await socketBundle.encryptFunc(socketBundle, utf8.encode(socketBundle.clientId));
 		length = clientIdBytes.length;
 		socket.add([length & 0xFF, (length >> 8) & 0xFF]);
 		socket.add(clientIdBytes);
 		await socket.flush();
 
-		return true;
+		// 第六步，根据 Socket 类型分开处理写入数据
+		switch(socketType) {
+			// 控制 Socket 类型
+			case kSocketTypeControl: {
+				// 无需写入额外信息
+				break;
+			}
 
+			// 请求 Socket 类型
+			case kSocketTypeRequest: {
+				socket.add([flagCode & 0xFF]);
+				await socket.flush();
+				break;
+			}
+
+			// 响应 Socket 类型
+			case kSocketTypeResponse: {
+				socket.add([flagCode & 0xFF]);
+				await socket.flush();
+				break;
+			}
+		}
+
+		// 第七步，等待 Server 响应
+		final respCode = await reader.readOneByte() & 0xFF;
+		return respCode == 250;
+
+	}
+}
+
+/// Client Command Sender
+class ClientCommand {
+	ClientCommand._();
+
+	/// Send heartbeat
+	///
+	///   0 1 2 3 4 5 6 7
+	/// + - - - - - - - -
+	/// |      type      |
+	/// + - - - - - - - -
+	///
+	/// type: int, 8 bits (1 bytes) , always 0x00
+	///
+	Future<void> sendHeartbeatTick(SocketBundle socketBundle) async {
+		socketBundle.socket.add([0x00]);
+		await socketBundle.socket.flush();
+	}
+
+	/// Send query client command
+	///
+	///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+	/// + - - - - - - - - - - - - - - - - +
+	/// |      type      |    cmdIdx      |
+	/// + - - - - - - - - - - - - - - - - +
+	///
+	///
+	/// type: int, 8 bits (1 bytes) , always 0x01
+	/// cmdIdx: int, 8 bits (1 bytes) , command idx, use to match command req & res, 0 represent no-res req
+	///
+	static Future<void> sendQueryClientCommand(SocketBundle socketBundle, {int cmdIdx}) async {
+		final bytesList = <int>[];
+		bytesList.add(0x01);
+		bytesList.add(cmdIdx & 0xFF);
+		socketBundle.socket.add(await socketBundle.encryptFunc(socketBundle, bytesList));
+		await socketBundle.socket.flush();
+		return;
+	}
+
+
+	/// Send request, open another port as local port
+	///
+	///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+	/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+	/// |      type      |    cmdIdx     |             port               |
+	/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	/// |                            ipAddress                            |
+	/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	/// |  transportType |    length     |           clientId             |
+	/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	/// |                            clientId                             |
+	/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	/// |                               ...                               |
+	/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+	///
+	///
+	/// type: int, 8 bits (1 bytes) , always 0x02
+	/// cmdIdx: int, 8 bits (1 bytes) , command idx, use to match command req & res, 0 represent no-res req
+	/// port: int, 16 bits (2 bytes) , via peer client, access specify port
+	/// ipAddress: int, 32 bits (4 bytes) , via peer client, access specify ip address. always 0x7F00000000(127.0.0.1)
+	/// transPort: int, 8 bits (1 bytes) , transport type, current only support tcp/ip(0x00)
+	/// length: int, 8 bits (1 bytes) , client id length, 1 ~ 255
+	///
+	static Future<void> sendRequestCommand(SocketBundle socketBundle, {int cmdIdx, String clientId, int ipAddress, int port, int transportType}) async {
+		final bytesList = <int>[];
+		bytesList.add(0x02);
+		bytesList.add(cmdIdx & 0xFF);
+		bytesList.add(port & 0xFF);
+		bytesList.add((port >> 8) & 0xFF);
+		bytesList.add(ipAddress & 0xFF);
+		bytesList.add((ipAddress >> 8) & 0xFF);
+		bytesList.add((ipAddress >> 16) & 0xFF);
+		bytesList.add((ipAddress >> 24) & 0xFF);
+		bytesList.add(transportType & 0xFF);
+		final clientIdBytes = utf8.encode(clientId);
+		bytesList.add(clientIdBytes.length & 0xFF);
+		bytesList.addAll(clientIdBytes);
+		socketBundle.socket.add(await socketBundle.encryptFunc(socketBundle, bytesList));
+		await socketBundle.socket.flush();
 	}
 }

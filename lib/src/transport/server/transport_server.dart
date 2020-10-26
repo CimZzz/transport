@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:stream_data_reader/stream_data_reader.dart';
 import 'package:transport/src/transport/server/socket_bundle.dart';
 
+import 's2c_step.dart';
+
 /// When server close, call this callback.
 /// * Only call it at first time.
 ///
@@ -13,9 +15,8 @@ typedef ServerCloseCallback = void Function(dynamic error, [StackTrace stackTrac
 
 /// Transport Client
 class TransportClient {
-    TransportClient(this.clientId, this.socketBundle);
+    TransportClient(this.socketBundle);
 
-	final String clientId;
 	final SocketBundle socketBundle;
 }
 
@@ -42,6 +43,11 @@ class TransportServer {
 
 	/// Server socket
 	ServerSocket _serverSocket;
+
+	/// Exist client map
+	final Map<String, TransportClient> _clientMap = {};
+
+
 
 	/// Do listen.
     /// When listen success, return true, either return false or throw exception
@@ -98,5 +104,77 @@ class TransportServer {
 			// todo 解析加密参数方法
 			analyzeEncryptParamsFunction: null,
 		);
+
+		HandShakeRespStep (
+			socketBundle,
+			registerClientCallback: _registerControlClient,
+			checkClientCallback: _checkClient,
+			constructRequestCallback: _receiveRequestSocket,
+			constructResponseCallback: _receiveResponseSocket
+		).doAction().then((isSuccess) {
+			if(!_isClosed && isSuccess) {
+				// 创建成功
+				_handshakeSuccess(socketBundle);
+			}
+			else {
+				// 握手失败
+				socketBundle.close();
+			}
+		}, onError: (e, [stackTrace]) {
+			// todo 分析握手失败原因
+			socketBundle.close();
+		});
+	}
+
+	/// Register Control Socket as `Client`
+	bool _registerControlClient(SocketBundle socketBundle, String clientId) {
+		if(_clientMap.containsKey(clientId)) {
+			return false;
+		}
+
+		_clientMap[clientId] = TransportClient(socketBundle);
+		return true;
+	}
+
+	/// Check Control Socket is exists
+	bool _checkClient(String clientId) {
+		return _clientMap.containsKey(clientId);
+	}
+
+	/// Receive request socket
+	bool _receiveRequestSocket(SocketBundle socketBundle, int flagCode) {
+		if(!_clientMap.containsKey(socketBundle.clientId)) {
+			return false;
+		}
+		// todo 处理后续请求 Socket 逻辑
+		return true;
+	}
+
+	/// Receive response socket
+	bool _receiveResponseSocket(SocketBundle socketBundle, int flagCode) {
+		if(!_clientMap.containsKey(socketBundle.clientId)) {
+			return false;
+		}
+		// todo 处理后续请求 Socket 逻辑
+		return true;
+	}
+
+	/// When handshake success, call this function
+	void _handshakeSuccess(SocketBundle socketBundle) {
+		if(socketBundle.socketType != kSocketTypeControl) {
+			return;
+		}
+
+		transformByteStream(socketBundle.reader.releaseStream(), (dataReader) async {
+			try {
+				var readType = await dataReader.readOneByte() & 0xFF;
+				switch(readType) {
+				}
+			}
+			catch(e) {
+				// 接收数据失败，连接终端
+				// todo 处理连接中断逻辑
+			}
+		});
 	}
 }

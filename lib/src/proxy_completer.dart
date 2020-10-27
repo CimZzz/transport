@@ -25,5 +25,4 @@ class ProxyCompleter<T> implements Completer<T> {
 
 	@override
 	bool get isCompleted => _completer.isCompleted;
-
 }

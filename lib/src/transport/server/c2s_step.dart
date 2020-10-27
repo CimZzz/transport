@@ -96,18 +96,33 @@ class HandShakeReqStep extends BaseSocketBundleStep<bool> {
 class ClientCommand {
 	ClientCommand._();
 
+
+	/// Send client command.
+	///
+	/// All client command  via this method to send, you can send custom message when
+	/// you need by this method
+	static Future<void> sendClientCommand(SocketBundle socketBundle, int commandType, {int cmdIdx, List<int> byteBuffer}) async {
+		final bytesList = <int>[commandType & 0xFF];
+
+		bytesList.add((cmdIdx ?? 0x00) & 0xFF);
+		if(byteBuffer != null) {
+			bytesList.addAll(byteBuffer);
+		}
+		await socketBundle.socket.flush();
+	}
+
+
 	/// Send heartbeat
 	///
-	///   0 1 2 3 4 5 6 7
-	/// + - - - - - - - -
-	/// |      type      |
-	/// + - - - - - - - -
+	///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+	/// + - - - - - - - - - - - - - - - - +
+	/// |      type      |    cmdIdx      |
+	/// + - - - - - - - - - - - - - - - - +
 	///
 	/// type: int, 8 bits (1 bytes) , always 0x00
 	///
-	Future<void> sendHeartbeatTick(SocketBundle socketBundle) async {
-		socketBundle.socket.add([0x00]);
-		await socketBundle.socket.flush();
+	static Future<void> sendHeartbeatTick(SocketBundle socketBundle) async {
+		await sendClientCommand(socketBundle, 0x00);
 	}
 
 	/// Send query client command
@@ -122,12 +137,7 @@ class ClientCommand {
 	/// cmdIdx: int, 8 bits (1 bytes) , command idx, use to match command req & res, 0 represent no-res req
 	///
 	static Future<void> sendQueryClientCommand(SocketBundle socketBundle, {int cmdIdx}) async {
-		final bytesList = <int>[];
-		bytesList.add(0x01);
-		bytesList.add(cmdIdx & 0xFF);
-		socketBundle.socket.add(await socketBundle.encryptFunc(socketBundle, bytesList));
-		await socketBundle.socket.flush();
-		return;
+		await sendClientCommand(socketBundle, 0x01, cmdIdx: cmdIdx);
 	}
 
 
@@ -156,8 +166,6 @@ class ClientCommand {
 	///
 	static Future<void> sendRequestCommand(SocketBundle socketBundle, {int cmdIdx, String clientId, int ipAddress, int port, int transportType}) async {
 		final bytesList = <int>[];
-		bytesList.add(0x02);
-		bytesList.add(cmdIdx & 0xFF);
 		bytesList.add(port & 0xFF);
 		bytesList.add((port >> 8) & 0xFF);
 		bytesList.add(ipAddress & 0xFF);
@@ -168,7 +176,6 @@ class ClientCommand {
 		final clientIdBytes = utf8.encode(clientId);
 		bytesList.add(clientIdBytes.length & 0xFF);
 		bytesList.addAll(clientIdBytes);
-		socketBundle.socket.add(await socketBundle.encryptFunc(socketBundle, bytesList));
-		await socketBundle.socket.flush();
+		await sendClientCommand(socketBundle, 0x02, cmdIdx: cmdIdx, byteBuffer: bytesList);
 	}
 }

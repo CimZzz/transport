@@ -132,23 +132,35 @@ class HandShakeRespStep extends BaseSocketBundleStep<bool> {
 class BridgeCommand {
 	BridgeCommand._();
 
+	/// Send bridge command.
+	///
+	/// All bridge command via this method to send, you can send custom message when
+	/// you need by this method
+	static Future<void> sendBridgeCommand(SocketBundle socketBundle, int commandType, {int replyIdx, List<int> byteBuffer}) async {
+		final bytesList = <int>[commandType & 0xFF];
+
+		bytesList.add((replyIdx ?? 0x00) & 0xFF);
+		if(byteBuffer != null) {
+			bytesList.addAll(byteBuffer);
+		}
+		await socketBundle.socket.flush();
+	}
+
 	/// Send heartbeat
 	///
-	///   0 1 2 3 4 5 6 7
-	/// + - - - - - - - -
-	/// |      type      |
-	/// + - - - - - - - -
+	///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+	/// + - - - - - - - - - - - - - - - -
+	/// |      type      |   replyIdx    |
+	/// + - - - - - - - - - - - - - - - -
 	///
 	/// type: int, 8 bits (1 bytes) , always 0x00
 	///
-	Future<void> sendHeartbeatTick(SocketBundle socketBundle) async {
-		socketBundle.socket.add([0x00]);
-		await socketBundle.socket.flush();
+	static Future<void> sendHeartbeatTick(SocketBundle socketBundle) async {
+		await sendBridgeCommand(socketBundle, 0x00);
 	}
 
 	/// When control socket ask for another control socket, via server
 	/// send request transfer.
-	///
 	///
 	///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
 	/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
@@ -159,12 +171,11 @@ class BridgeCommand {
 	/// replyIdx: int, 8 bits (1 bytes) , reply idx, use to match command req & res
 	/// port: int, 16 bits (2 bytes) , peer client want to access specify port
 	///
-	Future<void> sendRequestTransfer(SocketBundle socketBundle, int port) async {
+	static Future<void> sendRequestTransfer(SocketBundle socketBundle, int port, {int replyIdx}) async {
 		final bytesList = <int>[];
 		bytesList.add(0x01);
 		bytesList.add(port & 0xFF);
 		bytesList.add((port >> 8) & 0xFF);
-		socketBundle.socket.add(bytesList);
-		await socketBundle.socket.flush();
+		await sendBridgeCommand(socketBundle, 0x01, replyIdx: replyIdx, byteBuffer: bytesList);
 	}
 }

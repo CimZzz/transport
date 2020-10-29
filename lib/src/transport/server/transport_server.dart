@@ -2,9 +2,13 @@
 import 'dart:io';
 
 import 'package:stream_data_reader/stream_data_reader.dart';
-import 'package:transport/src/transport/server/socket_bundle.dart';
+import 'package:transport/src/transport/server/serialize.dart';
 
+import 'command_controller.dart';
 import 's2c_step.dart';
+import 'socket_bundle.dart';
+import 'transport_client.dart';
+
 
 /// When server close, call this callback.
 /// * Only call it at first time.
@@ -12,22 +16,77 @@ import 's2c_step.dart';
 /// If closed reason is error, call it with error information
 typedef ServerCloseCallback = void Function(dynamic error, [StackTrace stackTrace]);
 
+/// Server data bundle factory
+/// You can use this to customize data bundle any you want
+typedef ServerDataBundleFactory = TransportServerDataBundle Function();
 
 /// Transport Client
 class TransportClient {
     TransportClient(this.socketBundle);
 
 	final SocketBundle socketBundle;
+
+  /// Heartbeat wait time
+  /// if wait time over 60 seconds, server will disconnect this client
+  /// 
+  /// Any command will refresh wait time, not only heartbeat command 
+  var waitHeartbeatTime = 0;
+}
+
+/// Transport server data bundle
+/// Override it and expand field if you need
+class TransportServerDataBundle {
+	/// Exist client map
+	final Map<String, TransportClient> _clientMap = {};
+  int get clientCount => _clientMap.length;
+
+	/// Register Control Socket as `Client`
+	bool _registerControlClient(SocketBundle socketBundle, String clientId) {
+		if(_clientMap.containsKey(clientId)) {
+			return false;
+		}
+
+		_clientMap[clientId] = TransportClient(socketBundle);
+		return true;
+	}
+
+	/// Check Control Socket is exists
+	bool _checkClient(String clientId) {
+		return _clientMap.containsKey(clientId);
+	}
+
+  /// Rewrite `[]` operator, return TransportClient by clientId
+  TransportClient operator [] (String clientId) {
+    return _clientMap[clientId];
+  }
+
+  /// For each
+  void forEach(void Function(String clientId, TransportClient client) forEach) {
+    _clientMap.forEach(forEach);
+  }
+
+  /// Map
+  List<R> map<R>(R Function(String clientId, TransportClient client) forEach) {
+    final list = <R>[];
+    _clientMap.forEach((key, value) {
+      list.add(forEach(key, value));
+    });
+    return list;
+  }
 }
 
 /// Transport server
 /// listen port and process transport connection
 /// need specify server ip and port
 class TransportServer {
-    TransportServer(this.ip, this.port, {ServerCloseCallback serverCloseCallback}):
+    TransportServer(this.ip, this.port, {
+      ServerCloseCallback closeCallback,
+      ServerDataBundleFactory dataBundleFactory,
+    }):
 		    assert(ip != null),
 		    assert(port != null),
-		    _serverCloseCallback = serverCloseCallback;
+		    _serverCloseCallback = closeCallback,
+        _serverDataBundle = (dataBundleFactory == null ? TransportServerDataBundle() : dataBundleFactory()) ?? TransportServerDataBundle();
 
     /// Server ip address
 	final String ip;
@@ -44,13 +103,11 @@ class TransportServer {
 	/// Server socket
 	ServerSocket _serverSocket;
 
-	/// Exist client map
-	final Map<String, TransportClient> _clientMap = {};
-
-
+  /// Server data bundle
+  TransportServerDataBundle _serverDataBundle;
 
 	/// Do listen.
-    /// When listen success, return true, either return false or throw exception
+  /// When listen success, return true, either return false or throw exception
 	Future<bool> listen() async {
 		final socket = await ServerSocket.bind(ip, port);
 		if(_isClosed) {
@@ -107,8 +164,8 @@ class TransportServer {
 
 		HandShakeRespStep (
 			socketBundle,
-			registerClientCallback: _registerControlClient,
-			checkClientCallback: _checkClient,
+			registerClientCallback: _serverDataBundle._registerControlClient,
+			checkClientCallback: _serverDataBundle._checkClient,
 			constructRequestCallback: _receiveRequestSocket,
 			constructResponseCallback: _receiveResponseSocket
 		).doAction().then((isSuccess) {
@@ -126,35 +183,22 @@ class TransportServer {
 		});
 	}
 
-	/// Register Control Socket as `Client`
-	bool _registerControlClient(SocketBundle socketBundle, String clientId) {
-		if(_clientMap.containsKey(clientId)) {
-			return false;
-		}
 
-		_clientMap[clientId] = TransportClient(socketBundle);
-		return true;
-	}
-
-	/// Check Control Socket is exists
-	bool _checkClient(String clientId) {
-		return _clientMap.containsKey(clientId);
-	}
 
 	/// Receive request socket
 	bool _receiveRequestSocket(SocketBundle socketBundle, int flagCode) {
-		if(!_clientMap.containsKey(socketBundle.clientId)) {
+    if(!_serverDataBundle._checkClient(socketBundle.clientId)) {
 			return false;
-		}
+    }
 		// todo 处理后续请求 Socket 逻辑
 		return true;
 	}
 
 	/// Receive response socket
 	bool _receiveResponseSocket(SocketBundle socketBundle, int flagCode) {
-		if(!_clientMap.containsKey(socketBundle.clientId)) {
+    if(!_serverDataBundle._checkClient(socketBundle.clientId)) {
 			return false;
-		}
+    }
 		// todo 处理后续请求 Socket 逻辑
 		return true;
 	}
@@ -165,16 +209,131 @@ class TransportServer {
 			return;
 		}
 
-		transformByteStream(socketBundle.reader.releaseStream(), (dataReader) async {
-			try {
-				var readType = await dataReader.readOneByte() & 0xFF;
-				switch(readType) {
-				}
-			}
-			catch(e) {
+    final client = _serverDataBundle[socketBundle.clientId];
+
+    TransportServerCommandController(_serverDataBundle, client).beginCommandLoop().catchError((e) {
 				// 接收数据失败，连接终端
 				// todo 处理连接中断逻辑
-			}
-		});
+    });
 	}
+}
+
+
+/// Command Type - Request Transfer
+const Bridge_Command_Type_Request_Transfer = 0x02;
+
+/// Transport Server Command Controller
+class TransportServerCommandController extends CommandController {
+  TransportServerCommandController(this.dataBundle, this.client) : super(client.socketBundle);
+
+  /// Transport Server Data Bundle
+  final TransportServerDataBundle dataBundle;
+
+  /// Transport Client
+  final TransportClient client;
+
+	/// When control socket ask for another control socket, via server
+	/// send request transfer.
+	///
+	/// The peer client will support response socket in five seconds
+	///
+	///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+	/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+	/// |      type      |     cmdIdx    |             port               |
+	/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+	///
+	/// type: int, 8 bits (1 bytes) , always 0x02
+	/// cmdIdx: int, 8 bits (1 bytes) , command idx, use to match command req & res
+	/// port: int, 16 bits (2 bytes) , peer client want to access specify port
+  /// 
+  /// Client Reply:
+  ///
+  ///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7  
+  /// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+  /// |      type      |   replyIdx    |    cmdType    |    success     |
+  /// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+  /// 
+  /// type: int, 8 bits (1 bytes) , always 0x01
+  /// replyIdx: int, 8 bits (1 bytes) , reply idx, use to match command req & res, 0 represent no-res req
+  /// cmdType: int, 8 bits (1 bytes) , source command type, always 0x02
+  /// success: int, 8 bits (1 bytes) , request result, if success is 0, else is 1 
+  /// 
+	///
+	Future<bool> sendRequestTransfer(int port) async {
+		final bytesList = <int>[];
+		bytesList.add(port & 0xFF);
+		bytesList.add((port >> 8) & 0xFF);
+
+    final cmdIdx = nextCmdIdx();
+		await sendCommand(Bridge_Command_Type_Request_Transfer, cmdIdx: cmdIdx, byteBuffer: bytesList);
+    return waitCommand(cmdIdx);
+	}
+
+  /// Handle client command
+  @override
+  Future<bool> handleCommand(int commandType, int idx, DataReader reader) async {
+    // Any message can reset wait heartbeat time
+    client.waitHeartbeatTime = 0;
+    switch(commandType) {
+      case Command_Type_Heartbeat:
+        // Receive Heartbeat
+        // Nothing
+        return true;
+
+      case Command_Type_Reply: {
+        // Receive client reply
+        final srcCommandType = await reader.readOneByte() & 0xFF;
+        var handleResult = false;
+        switch(srcCommandType) {
+          case Bridge_Command_Type_Request_Transfer:
+            // Send request transfer command result
+            final isSuccess = await reader.readOneByte() & 0xFF;
+            completeCommand(idx, isSuccess);
+            handleResult = true;
+            break;
+          default:
+            handleResult = await handleAnotherReply(commandType, idx, srcCommandType, reader);
+            break;
+        }
+        return handleResult;
+      }
+
+      case Client_Command_Type_Query_Client: {
+        // Receive client query command
+        var clientCount = dataBundle.clientCount;
+        try {
+          final bufferList = await serializeTransportClient(dataBundle.map((clientId, client) 
+              => TransportClientOptions(clientId: client.socketBundle.clientId)));
+          bufferList.insert(0, clientCount & 0xFF);
+          await sendReply(Client_Command_Type_Query_Client, idx, byteBuffer: bufferList);
+        }
+        catch(e) {
+          final bufferList = [0x00];
+          await sendReply(Client_Command_Type_Query_Client, idx, byteBuffer: bufferList);
+        }
+        return true;
+      }
+
+      case Client_Command_Type_Request: {
+        // Receive client request peer client command
+        // todo
+        return false;
+      }
+      
+      default:
+        return await handleAnotherCommand(commandType, idx, reader);
+    }
+  }
+
+  /// Handle another command
+  /// If you want to custom command, you may be can use override it to implement.
+  Future<bool> handleAnotherCommand(int commandType, int idx, DataReader reader) async {
+    return false;
+  }
+
+  /// Handle another command reply
+  /// If you want to custom command, you may be can use override it to implement.
+  Future<bool> handleAnotherReply(int commandType, int idx, int srcCommandType, DataReader reader) async {
+    return false;
+  }
 }

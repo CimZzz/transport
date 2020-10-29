@@ -30,8 +30,8 @@ class SocketBundle {
     SocketBundle({this.socket, this.reader, this.encryptFunc, this.decryptFunc, this.encryptParamsFunction, this.analyzeEncryptParamsFunction}):
 		    ipAddress = socket.address.address;
 
-    final Socket socket;
-    final String ipAddress;
+  final Socket socket;
+  final String ipAddress;
 	final ByteBufferReader reader;
 	final MessageEncryptFunction encryptFunc;
 	final MessageDecryptFunction decryptFunc;
@@ -41,7 +41,7 @@ class SocketBundle {
 	String clientId;
 	int socketType;
 
-    Map<String, dynamic> _keyCache;
+  Map<String, dynamic> _keyCache;
 	Map<String, dynamic> get keyCache => _keyCache ??= {};
 
 	/// Close current connection

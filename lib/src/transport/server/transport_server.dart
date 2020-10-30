@@ -1,11 +1,12 @@
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:stream_data_reader/stream_data_reader.dart';
-import 'package:transport/src/transport/server/serialize.dart';
 
 import 'command_controller.dart';
 import 's2c_step.dart';
+import 'serialize.dart';
 import 'socket_bundle.dart';
 import 'transport_client.dart';
 
@@ -24,7 +25,11 @@ typedef ServerDataBundleFactory = TransportServerDataBundle Function();
 class TransportClient {
     TransportClient(this.socketBundle);
 
+  /// Socket Bundle
 	final SocketBundle socketBundle;
+
+  /// Transport Server Command Controller
+  TransportServerCommandController commandController;
 
   /// Heartbeat wait time
   /// if wait time over 60 seconds, server will disconnect this client
@@ -210,8 +215,9 @@ class TransportServer {
 		}
 
     final client = _serverDataBundle[socketBundle.clientId];
+    client.commandController = TransportServerCommandController(_serverDataBundle, client);
 
-    TransportServerCommandController(_serverDataBundle, client).beginCommandLoop().catchError((e) {
+    client.commandController.beginCommandLoop().catchError((e) {
 				// 接收数据失败，连接终端
 				// todo 处理连接中断逻辑
     });
@@ -240,11 +246,14 @@ class TransportServerCommandController extends CommandController {
 	///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
 	/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
 	/// |      type      |     cmdIdx    |             port               |
+	/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	/// |                            ipAddress                            |
 	/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
 	///
 	/// type: int, 8 bits (1 bytes) , always 0x02
 	/// cmdIdx: int, 8 bits (1 bytes) , command idx, use to match command req & res
 	/// port: int, 16 bits (2 bytes) , peer client want to access specify port
+	/// ipAddress: int, 32 bits (4 bytes) , via peer client, access specify ip address. always 0x7F00000000(127.0.0.1)
   /// 
   /// Client Reply:
   ///
@@ -259,10 +268,14 @@ class TransportServerCommandController extends CommandController {
   /// success: int, 8 bits (1 bytes) , request result, if success is 0, else is 1 
   /// 
 	///
-	Future<bool> sendRequestTransfer(int port) async {
+	Future<bool> sendRequestTransfer(int ipAddress, int port) async {
 		final bytesList = <int>[];
 		bytesList.add(port & 0xFF);
 		bytesList.add((port >> 8) & 0xFF);
+		bytesList.add(ipAddress & 0xFF);
+		bytesList.add((ipAddress >> 8) & 0xFF);
+		bytesList.add((ipAddress >> 16) & 0xFF);
+		bytesList.add((ipAddress >> 24) & 0xFF);
 
     final cmdIdx = nextCmdIdx();
 		await sendCommand(Bridge_Command_Type_Request_Transfer, cmdIdx: cmdIdx, byteBuffer: bytesList);
@@ -316,8 +329,25 @@ class TransportServerCommandController extends CommandController {
 
       case Client_Command_Type_Request: {
         // Receive client request peer client command
-        // todo
-        return false;
+        final port = await reader.readShort(bigEndian: false);
+        final ipAddress = await reader.readInt(bigEndian: false);
+        final transportType = await reader.readOneByte() & 0xFF;
+
+        if(transportType != 0x00) {
+          return false;
+        }
+
+        final length = await reader.readOneByte() & 0xFF;
+        final clientId = utf8.decode(await reader.readBytes(length: length));
+        
+        final client = dataBundle[clientId];
+        if(client == null) {
+          await sendReply(commandType, idx, byteBuffer: [0x01]);
+          return true;
+        }
+
+        await sendRequestTransfer(ipAddress, port);
+        return true;
       }
       
       default:

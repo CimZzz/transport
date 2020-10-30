@@ -55,9 +55,9 @@ class HandShakeRespStep extends BaseSocketBundleStep<bool> {
 		await socket.flush();
 
 		// 第四步，接收 Socket 类型
-		// 0 - 控制 Socket
-		// 1 - Request Socket
-		// 2 - Response Socket
+		// 0 - 控制 Socket - 无需 ClientId
+		// 1 - Request Socket - 无需 ClientId
+		// 2 - Response Socket - 需要 ClientId
 		final socketType = await reader.readOneByte() & 0xFF;
 		if(socketType < 0 || socketType > 2) {
 			// 类型错误
@@ -65,23 +65,8 @@ class HandShakeRespStep extends BaseSocketBundleStep<bool> {
 		}
 		socketBundle.socketType = socketType;
 
-		// 第五步，接收对端发送而来的 Client Id，检查来源
-		final clientIdLength = await reader.readOneByte() & 0xFF;
-		final clientIdBytes = socketBundle.decryptFunc(socketBundle, await reader.readBytes(length: clientIdLength));
-		final clientId = utf8.decode(clientIdBytes);
-		socketBundle.clientId = clientId;
-
-		// 第六步，根据 Socket 类型分开处理
+		// 第五步，根据 Socket 类型分开处理
 		switch(socketType) {
-			// 控制 Socket 类型
-			case kSocketTypeControl: {
-				// 绑定控制套接字
-				if(!registerClientCallback(socketBundle, clientId)) {
-					// 绑定失败，返回 false
-					return false;
-				}
-				break;
-			}
 
 			// 请求 Socket 类型
 			case kSocketTypeRequest: {
@@ -103,6 +88,12 @@ class HandShakeRespStep extends BaseSocketBundleStep<bool> {
 
 			// 响应 Socket 类型
 			case kSocketTypeResponse: {
+        // 接收对端发送而来的 Client Id，检查来源
+        final clientIdLength = await reader.readOneByte() & 0xFF;
+        final clientIdBytes = socketBundle.decryptFunc(socketBundle, await reader.readBytes(length: clientIdLength));
+        final clientId = utf8.decode(clientIdBytes);
+        socketBundle.clientId = clientId;
+
 				// 查询响应 Socket 对应 Client Id 是否存在
 				if(!checkClientCallback(clientId)) {
 					// 对应控制套接字已经不存在了，断开

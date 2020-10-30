@@ -55,14 +55,7 @@ class HandShakeReqStep extends BaseSocketBundleStep<bool> {
 		}
 		socket.add([socketType]);
 
-		// 第五步，发送 Client Id
-		final clientIdBytes = await socketBundle.encryptFunc(socketBundle, utf8.encode(socketBundle.clientId));
-		length = clientIdBytes.length;
-		socket.add([length & 0xFF, (length >> 8) & 0xFF]);
-		socket.add(clientIdBytes);
-		await socket.flush();
-
-		// 第六步，根据 Socket 类型分开处理写入数据
+		// 第五步，根据 Socket 类型分开处理写入数据
 		switch(socketType) {
 			// 控制 Socket 类型
 			case kSocketTypeControl: {
@@ -79,6 +72,14 @@ class HandShakeReqStep extends BaseSocketBundleStep<bool> {
 
 			// 响应 Socket 类型
 			case kSocketTypeResponse: {
+
+        // 发送 Client Id
+        final clientIdBytes = await socketBundle.encryptFunc(socketBundle, utf8.encode(socketBundle.clientId));
+        length = clientIdBytes.length;
+        socket.add([length & 0xFF, (length >> 8) & 0xFF]);
+        socket.add(clientIdBytes);
+        await socket.flush();
+
 				socket.add([flagCode & 0xFF]);
 				await socket.flush();
 				break;

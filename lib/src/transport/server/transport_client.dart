@@ -94,7 +94,19 @@ class TransportClientCommandController extends CommandController {
 	/// ipAddress: int, 32 bits (4 bytes) , via peer client, access specify ip address. always 0x7F00000000(127.0.0.1)
 	/// transPort: int, 8 bits (1 bytes) , transport type, current only support tcp/ip(0x00)
 	/// length: int, 8 bits (1 bytes) , client id length, 1 ~ 255
-	///
+	/// 
+  /// Server Reply:
+  ///
+  ///   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7  
+  /// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+  /// |      type      |   replyIdx    |    cmdType    |    success     |
+  /// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+  /// 
+  /// type: int, 8 bits (1 bytes) , always 0x01
+  /// replyIdx: int, 8 bits (1 bytes) , reply idx, use to match command req & res, 0 represent no-res req
+  /// cmdType: int, 8 bits (1 bytes) , source command type, always 0x02
+  /// success: int, 8 bits (1 bytes) , request result, if success is 0, else is 1 
+  /// 
 	Future<void> sendRequestCommand({int cmdIdx, String clientId, int ipAddress, int port, int transportType}) async {
 		final bytesList = <int>[];
 		bytesList.add(port & 0xFF);

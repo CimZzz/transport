@@ -1,13 +1,16 @@
+/// Created by CimZzz
+/// 序列化类，用来异步序列化对象，减少主 Isolate 的延迟
+
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:transport/src/async_run.dart';
+import '../../async_run.dart';
 
 ///
 /// Transport Client Options
 ///
-class TransportClientOptions {
-  TransportClientOptions({this.clientId});
+class TransportClientInfo {
+  TransportClientInfo({this.clientId});
   final String clientId;
 }
 
@@ -15,20 +18,20 @@ class TransportClientOptions {
 /// Serialize Transport Client
 ///
 
-Future<List<int>> serializeTransportInfo(Iterable<TransportClientOptions> clients) async {
+Future<List<int>> serializeTransportClient(Iterable<TransportClientInfo> clients) async {
   if(clients.isEmpty) {
     return [];
   }
 
   final buffer = await asyncRun(
     clients,
-    _serializeTransportInfo
+    _serializeTransportClient
   );
 
   return buffer;
 }
 
-FutureOr<List<int>> _serializeTransportInfo(Iterable<TransportClientOptions> clients) async {
+FutureOr<List<int>> _serializeTransportClient(Iterable<TransportClientInfo> clients) async {
   final buffer = <int>[];
   clients.forEach((client) {
     final clientId = client.clientId;

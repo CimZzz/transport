@@ -36,24 +36,6 @@ class HandShakeRespStep extends BaseSocketBundleStep<bool> {
 			return false;
 		}
 
-		// 第二步，接收 Client 传来的加密参数（比如 RSA 加密，对端的公钥证书就可以借此发送过来）
-		// 但是参数长度限制在 2 个字节内，如果长度为 0，表示无需任何加密参数
-
-		final encryptLength = (await reader.readOneByte() & 0xFF) | ((await reader.readOneByte() & 0xFF) << 8);
-		if(encryptLength != 0) {
-			final encryptBytes = socketBundle.decryptFunc(socketBundle, await reader.readBytes(length: encryptLength));
-			socketBundle.analyzeEncryptParamsFunction(socketBundle, encryptBytes);
-		}
-
-		// 第三步，发送完成接收指令
-		// 实际上是由 Server 端根据加密报文再发送一遍 "Transport"
-
-		final magicBytes = await socketBundle.encryptFunc(socketBundle, utf8.encode('Transport'));
-		var sendMagicLength = magicBytes.length;
-		socket.add([sendMagicLength & 0xFF, (sendMagicLength >> 8) & 0xFF]);
-		socket.add(magicBytes);
-		await socket.flush();
-
 		// 第四步，接收 Socket 类型
 		// 0 - 控制 Socket - 无需 ClientId
 		// 1 - Request Socket - 无需 ClientId

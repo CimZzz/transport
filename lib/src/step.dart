@@ -33,9 +33,14 @@ abstract class BaseStep<T> {
 	}
 }
 
-/// Base Socket Bundle Step
-abstract class BaseSocketBundleStep<T> extends BaseStep<T> {
-	BaseSocketBundleStep(this.socketBundle, Duration timeout) : super(timeout);
+/// 超时处理步骤
+class TimeoutStep<T> extends BaseStep<T> {
+    TimeoutStep({Duration timeout}) : super(timeout);
 
-	final SocketBundle socketBundle;
+	final ProxyCompleter<T> innerCompleter = ProxyCompleter();
+
+    @override
+    Future<T> onStepAction() async {
+    	return await innerCompleter.future;
+    }
 }

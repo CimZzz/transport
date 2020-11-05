@@ -33,6 +33,9 @@ const kSocketTypeResponse = 2;
 /// 查询指令 - 查询全部响应客户端
 const kQueryCommand_Client = 0;
 
+/// 代理模式 - 普通代理模式
+const kProxyMode_Normal = 0;
+
 
 /// Transport Bridge 配置信息
 class TransportBridgeOptions {
@@ -92,6 +95,9 @@ class TransportBridge {
   /// key = client id
   Map<String, TransportClient> _responseClientMap = {};
 
+  /// 请求 & 响应匹配码
+  /// 用来将请求 Socket 和 响应 Socket 做匹配
+  var matchCode = 0;
 
   /// =================================================
   /// 对外暴露方法
@@ -124,11 +130,11 @@ class TransportBridge {
       /// 握手失败
       /// todo 处理握手失败
     });
-    timeoutStep.innerCompleter.complete(_socketHandShake(client));
+    timeoutStep.innerCompleter.complete(_socketHandshake(client));
 	}
 
   /// Socket 握手
-  Future<TransportClient> _socketHandShake(TransportClient client) async {
+  Future<TransportClient> _socketHandshake(TransportClient client) async {
 		final socket = client.socket;
 		final reader = client.reader;
 
@@ -261,6 +267,11 @@ class TransportBridge {
         final clientId = utf8.decode(clientIdBytes);
 
         final proxyMode = await reader.readOneByte() & 0xFF;
+        switch(proxyMode) {
+          case kProxyMode_Normal:
+          // 普通代理模式
+            break;
+        }
     }
     catch(e, [stackTrace]) {
 

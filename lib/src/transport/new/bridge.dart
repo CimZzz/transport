@@ -14,6 +14,7 @@
 import 'dart:io';
 import 'dart:convert';
 
+import 'package:stream_data_reader/stream_data_reader.dart';
 import 'package:transport/src/proxy_completer.dart';
 import 'package:transport/src/transport/new/serialize.dart';
 
@@ -29,6 +30,14 @@ const kSocketTypeRequest = 1;
 
 /// 响应 Socket 类型
 const kSocketTypeResponse = 2;
+
+/// 会话 Socket 类型
+/// 来自请求 Socket，表示需要响应 Socket 回复代理链接
+const kSocketTypeSession = 3;
+
+/// 回复 Socket 类型
+/// 来自响应 Socket，与会话 Socket 做匹配
+const kSocketTypeReply = 4;
 
 /// 查询指令 - 查询全部响应客户端
 const kQueryCommand_Client = 0;
@@ -62,6 +71,34 @@ class TransportClient extends SocketWrapper {
   ProxyCompleter _completer;
 }
 
+/// 代理匹配域
+class ProxyMatchScope {
+  ProxyMatchScope(this.matchCode);
+
+  /// 匹配码
+  final int matchCode;
+  /// 会话客户端
+  TransportClient sessionClient;
+  /// 代理客户端
+  TransportClient replyClient;
+
+  /// 匹配计时开始
+  Future countdown() {
+    final step = TimeoutStep(timeout: const Duration(seconds: 10));
+    step.doAction().then((_) {
+      step.innerCompleter.complete(null);
+    }, onError: (error, [stackTrace]) {
+      step.innerCompleter.completeError(error, stackTrace);
+    });
+
+    return step.innerCompleter.future;
+  }
+
+  void tryMatch() {
+
+  }
+}
+
 /// Transport Bridge - 桥接服务器
 class TransportBridge {
   TransportBridge._(this.options);
@@ -93,7 +130,11 @@ class TransportBridge {
 
   /// 响应 Client 表
   /// key = client id
-  Map<String, TransportClient> _responseClientMap = {};
+  final Map<String, TransportClient> _responseClientMap = {};
+
+  /// 匹配域列表
+  final Map<int, ProxyMatchScope> _matchScopeMap = {};
+
 
   /// 请求 & 响应匹配码
   /// 用来将请求 Socket 和 响应 Socket 做匹配
@@ -240,42 +281,56 @@ class TransportBridge {
 
   /// 处理请求 Socket
   void _requestSocketHandle(TransportClient client) async {
-    final timeoutStep = TimeoutStep(timeout: Duration(seconds: 10));
-    var _ = timeoutStep.doAction().then((result) {
-      /// 完成指令后，关闭
-      /// todo
-    }, onError: (e, [stackTrace]) {
-      /// 异常处理
-      client.close();
-    });
-    client._completer = timeoutStep.innerCompleter;
-    final reader = client.reader;
-    try {
-        // 解析请求 Socket 想要代理的信息
-        // - Client: 想要代理的 ClientId
-        // - ProxyMode: 代理模式
-        //    - 0: 常规代理模式
-        //    - 1: 指令代理模式（未实现）
-        //    - 2: 文件模式（未实现）
-        //
-        //
-        // ----- 常规代理模式
-        // - Ip: 想要通过代理访问的 Ip 地址
-        // - Port: 想要通过代理访问的端口号
-        final clientIdLength = await reader.readOneByte() & 0xFF;
-        final clientIdBytes = await reader.readBytes(length: clientIdLength);
-        final clientId = utf8.decode(clientIdBytes);
-
-        final proxyMode = await reader.readOneByte() & 0xFF;
-        switch(proxyMode) {
-          case kProxyMode_Normal:
-          // 普通代理模式
-            break;
+    transformByteStream(client.reader.releaseStream(), (reader) async {
+      try {
+        final reqType = await reader.readOneByte();
+        switch(reqType) {
+          case 0x00:
+          // 收到心跳报文
+           
+          break;
+          case 0x01:
+          // 收到请求代理指令
+          
+          final responseClient = _responseClientMap[client.clientId];
+          if(responseClient != null) {
+            // 存在对应的响应 Socket, 建立匹配域
+          }
+          break;
         }
-    }
-    catch(e, [stackTrace]) {
+      }
+      catch(e, stackTrace) {
+        /// 请求 Socket 发生异常
+        /// todo
+      }
+    });
+    // final reader = client.reader;
+    // try {
+    //     // 解析请求 Socket 想要代理的信息
+    //     // - Client: 想要代理的 ClientId
+    //     // - ProxyMode: 代理模式
+    //     //    - 0: 常规代理模式
+    //     //    - 1: 指令代理模式（未实现）
+    //     //    - 2: 文件模式（未实现）
+    //     //
+    //     //
+    //     // ----- 常规代理模式
+    //     // - Ip: 想要通过代理访问的 Ip 地址
+    //     // - Port: 想要通过代理访问的端口号
+    //     final clientIdLength = await reader.readOneByte() & 0xFF;
+    //     final clientIdBytes = await reader.readBytes(length: clientIdLength);
+    //     final clientId = utf8.decode(clientIdBytes);
 
-    }
+    //     final proxyMode = await reader.readOneByte() & 0xFF;
+    //     switch(proxyMode) {
+    //       case kProxyMode_Normal:
+    //       // 普通代理模式
+    //         break;
+    //     }
+    // }
+    // catch(e, [stackTrace]) {
+
+    // }
   }
 
   /// 处理响应 Socket

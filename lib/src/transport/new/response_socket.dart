@@ -7,10 +7,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:stream_data_reader/stream_data_reader.dart';
-import 'package:transport/src/proxy_completer.dart';
 
 import '../../step.dart';
 import 'bridge.dart';
+import 'response_connection.dart';
 import 'socket_wrapper.dart';
 
 /// 响应 Socket 注册配置
@@ -200,32 +200,5 @@ class _ResponseClient {
         unfortunateError(e);
       }
     });
-  }
-}
-
-/// 响应连接
-abstract class _ResponseConnection {
-  /// 连接完成 Completer
-  ProxyCompleter _completer;
-
-  Stream<List<int>> openStream();
-
-  Future<void> writeData(List<int> data);
-
-  void close();
-
-  Future<void> doTransport(Socket socket) {
-    socket.listen((event) async {
-      try {
-        await writeData(event);
-      }
-      catch(e) {
-      }
-    }, onError: (e, [stackTrace]) {
-      
-    });
-    openStream().listen((event) {
-      
-    })
   }
 }

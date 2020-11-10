@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:stream_data_reader/stream_data_reader.dart';
 
+
 class SocketWrapper {
   SocketWrapper(this.socket): 
     address = socket.address.address,

@@ -5,20 +5,20 @@ import 'dart:convert';
 
 import 'dart:io';
 
-import 'package:stream_data_reader/src/data_reader.dart';
-import 'package:transport/src/step.dart';
-import 'package:transport/src/transport/new/tunnel.dart';
+import 'package:stream_data_reader/stream_data_reader.dart';
 
 import '../../proxy_completer.dart';
-import 'response_connection.dart';
+import 'connection.dart';
 import 'socket_wrapper.dart';
 import 'bridge.dart';
+import 'tunnel.dart';
 
 class ReplySocket extends Tunnel {
-  ReplySocket({this.ipAddress, this.port, this.clientId, this.matchCode, this.connection});
+  ReplySocket({this.ipAddress, this.port, this.clientId, this.matchCode});
 
   /// 桥接服务器 IP 地址
   final String ipAddress;
+
   /// 桥接服务器端口号
   final int port;
 
@@ -29,7 +29,7 @@ class ReplySocket extends Tunnel {
   final int matchCode;
 
   /// 对应的响应连接
-  TransportConnection connection;
+  Connection connection;
 
   /// Socket 包装器
   SocketWrapper _wrapper;
@@ -40,7 +40,7 @@ class ReplySocket extends Tunnel {
   /// 握手处理
   Future<void> begin() async {
     final socket = await Socket.connect(ipAddress, port);
-    _wrapper =  SocketWrapper(socket);
+    _wrapper = SocketWrapper(socket);
     return await concat(_wrapper);
   }
 
@@ -66,7 +66,13 @@ class ReplySocket extends Tunnel {
     // 第二步, 发送 SocketType
     socket.add([kSocketTypeReply]);
     await socket.flush();
-    // 第三步, 发送匹配码
+    // 第三步, 发送 ClientId
+    final clientIdBytes = utf8.encode(clientId);
+    final length = clientIdBytes.length;
+    socket.add([length & 0xFF, (length >> 8) & 0xFF]);
+    socket.add(clientIdBytes);
+    await socket.flush();
+    // 第四步, 发送匹配码
     socket.add([matchCode & 0xFF, (matchCode >> 8) & 0xFF]);
     await socket.flush();
     // 等待 Bridge Server 的响应

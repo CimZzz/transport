@@ -7,10 +7,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:stream_data_reader/stream_data_reader.dart';
+import 'package:transport/src/framework/general_methods.dart';
 
 import '../../step.dart';
 import 'bridge.dart';
-import 'response_connection.dart';
+import 'command_writer.dart';
+import 'connection.dart';
+import 'heartbeat_machine.dart';
+import 'reply_socket.dart';
 import 'socket_wrapper.dart';
 
 /// 响应 Socket 注册配置
@@ -50,11 +54,11 @@ class ResponseSocketOption {
 
 /// 响应 Socket
 class ResponseSocket {
-  ResponseSocket._(this.option);
+  ResponseSocket._({this.option});
 
   /// 绑定桥接服务器
   static ResponseSocket bindBridge(ResponseSocketOption option) {
-    final socket = ResponseSocket._(option);
+    final socket = ResponseSocket._(option: option);
     socket._doBindBridgeServer();
     return socket;
   }
@@ -71,9 +75,14 @@ class ResponseSocket {
   /// =================================================
   /// 对外暴露方法
   /// =================================================
-  
-  
 
+  /// 关闭 Response Socket
+  void close() {
+    _clientSet.forEach((client) {
+      client.destroy();
+    });
+    _clientSet.clear();
+  }  
 
   
   /// =================================================
@@ -100,7 +109,10 @@ class _ResponseClient {
   SocketWrapper socketWrapper;
   /// 判断当前是否被销毁
   var isClosed = false;
-
+  /// Reply Socket 集合
+  Set<ReplySocket> replySocketSet;
+  /// 心跳机
+  HeartbeatMachine heartbeatMachine;
 
   /// 连接方法
   void connect() {
@@ -126,6 +138,12 @@ class _ResponseClient {
 
   /// 断开连接方法
   void disconnect() {
+    heartbeatMachine?.cancel();
+    heartbeatMachine = null;
+    replySocketSet?.forEach((replySocket) { 
+      replySocket.close();
+    });
+    replySocketSet = null;
     socketWrapper?.close();
     socketWrapper = null;
   }
@@ -182,17 +200,44 @@ class _ResponseClient {
 
   /// 握手成功回调
   void _handshakeSuccess() async {
+    heartbeatMachine = HeartbeatMachine(
+      interval: const Duration(seconds: 1),
+      remindCount: 6,
+      timeoutCount: 10,
+    );
+    // 启动心跳机
+    heartbeatMachine.monitor().listen((_) {
+      // 推送心跳报文
+      CommandWriter.sendHeartbeat(socketWrapper.socket, isNeedReply: true);
+    }, onError: (error) {
+      // 心跳超时
+      unfortunateError(error);
+    });
+
     transformByteStream(socketWrapper.reader.releaseStream(), (reader) async {
       try {
-        final matchCode = await reader.readShort(bigEndian: false);
-        final proxyMode = await reader.readOneByte();
-        switch(proxyMode) {
-          case kProxyMode_Normal:
-          // 普通代理模式
-          // 读取代理的 IP 地址和端口
-            final ipAddress = utf8.decode(await reader.readBytes(length: await reader.readOneByte()));
-            final port = await reader.readShort(bigEndian: false);
-
+        final reqType = await reader.readOneByte();
+        switch(reqType) {
+          case 0x00:
+          // 收到心跳报文
+            break;
+          case 0x01:
+            final matchCode = await reader.readInt(bigEndian: false);
+            final replySocket = ReplySocket(
+              ipAddress: registrar.ipAddress,
+              port: registrar.port,
+              clientId: registrar.clientId,
+              matchCode: matchCode
+            );
+            replySocketSet ??= {};
+            replySocketSet.add(replySocket);
+            unawait(replySocket.begin().catchError((error) {
+              replySocketSet?.remove(replySocket);
+            }));
+            break;
+          default:
+          // 收到不支持的指令
+            throw Exception('收到其他不支持的指令: $reqType');
             break;
         }
       }

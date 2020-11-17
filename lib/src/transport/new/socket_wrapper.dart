@@ -8,10 +8,10 @@ import 'package:stream_data_reader/stream_data_reader.dart';
 
 
 class SocketWrapper {
-  SocketWrapper(this.socket): 
+  SocketWrapper(this.socket, {ByteBufferReader reader}): 
     address = socket.address.address,
     port = socket.port,
-    reader = ByteBufferReader(StreamReader(socket));
+    reader = DataReader(reader ?? ByteBufferReader(StreamReader(socket)));
   
   /// Socket 对象
   final Socket socket;
@@ -23,7 +23,7 @@ class SocketWrapper {
   final int port;
 
   /// Socket Reader
-	ByteBufferReader reader;
+	DataReader reader;
 
 	/// 关闭当前连接
 	void close() {

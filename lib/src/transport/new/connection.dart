@@ -19,61 +19,7 @@ abstract class Connection {
 
   /// 关闭流连接
   void close();
-}
 
-/// Socket 连接基类
-class SocketConnection extends Connection {
-  SocketConnection(this._socketWrapper);
-  SocketWrapper _socketWrapper;
-
-
-  @override
-  void close() {
-    _socketWrapper?.close();
-    _socketWrapper = null;
-  }
-
-  @override
-  Stream<List<int>> openStream() => _socketWrapper.reader.releaseStream();
-
-  @override
-  Future<void> writeData(List<int> data) {
-    _socketWrapper?.socket?.add(data);
-    return _socketWrapper?.socket?.flush();
-  }
-}
-
-/// 代理 Connect
-/// 离散化连接
-class ProxyConnection extends Connection {
-  ProxyConnection(this.writeDataCallback);
-
-  final Future<void> Function(List<int> data) writeDataCallback;
-  var _controller = StreamController<List<int>>();
-
-  @override
-  void close() {
-    _controller?.close();
-    _controller = null;
-  }
-
-  @override
-  Stream<List<int>> openStream() => _controller?.stream;
-
-  @override
-  Future<void> writeData(List<int> data) {
-    return writeDataCallback(data);
-  }
-
-  /// 向流中追加数据
-  void addStreamData(List<int> data) {
-    _controller?.add(data);
-  }
-}
-
-
-/// 传输连接基类
-abstract class TransportConnection extends Connection {
   /// 连接完成 Completer
   ProxyCompleter _completer;
 
@@ -126,8 +72,58 @@ abstract class TransportConnection extends Connection {
   }
 }
 
+/// Socket 连接基类
+class SocketConnection extends Connection {
+  SocketConnection(this._socketWrapper);
+  SocketWrapper _socketWrapper;
+
+
+  @override
+  void close() {
+    _socketWrapper?.close();
+    _socketWrapper = null;
+  }
+
+  @override
+  Stream<List<int>> openStream() => _socketWrapper.reader.releaseStream();
+
+  @override
+  Future<void> writeData(List<int> data) {
+    _socketWrapper?.socket?.add(data);
+    return _socketWrapper?.socket?.flush();
+  }
+}
+
+/// 代理 Connect
+/// 离散化连接
+class ProxyConnection extends Connection {
+  ProxyConnection(this.writeDataCallback);
+
+  final Future<void> Function(List<int> data) writeDataCallback;
+  var _controller = StreamController<List<int>>();
+
+  @override
+  void close() {
+    _controller?.close();
+    _controller = null;
+  }
+
+  @override
+  Stream<List<int>> openStream() => _controller?.stream;
+
+  @override
+  Future<void> writeData(List<int> data) {
+    return writeDataCallback(data);
+  }
+
+  /// 向流中追加数据
+  void addStreamData(List<int> data) {
+    _controller?.add(data);
+  }
+}
+
 /// 本地代理连接
-class LocalResponseConnection extends TransportConnection {
+class LocalResponseConnection extends Connection {
   LocalResponseConnection({this.ipAddress, this.port});
   
   final String ipAddress;

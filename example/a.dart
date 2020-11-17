@@ -6,20 +6,14 @@ import 'package:transport/src/async_run.dart';
 
 /// 主函数
 void main() async {
-  Future.delayed(Duration(seconds:1), () {
-    return 1;
-  }).asStream().listen((event) {
-    throw 123;
-  }, onError: (e) {
-    print('catch error: $e');
-  }, cancelOnError: true);
-  // Socket.connect('xinfayun.com.cn', 1883).then((value) {
-  //   print('connect success');
-  // }, onError: (e) {
-  //   print('$e');
-  // });
-
-  // await Future.delayed(Duration(seconds: 60));
+  final controller = StreamController<void>();
+  controller.stream.listen((event) {
+    print('zzzzz');
+  }, onError: (e){}, onDone: () {
+    print('done');
+  });
+  controller.add(null);
+  controller.close();
 }
 
 FutureOr<int> a(List<int> params) async {

@@ -21,7 +21,7 @@ import '../../proxy_completer.dart';
 import 'socket_wrapper.dart';
 import 'tunnel.dart';
 import 'bridge.dart';
-import 'response_connection.dart';
+import 'connection.dart';
 
 
 class SessionSocket extends Tunnel {

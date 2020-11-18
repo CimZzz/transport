@@ -1,3 +1,7 @@
+/// Created by CimZzz
+/// 异步执行获取结果
+/// 或者异步 Future 执行
+
 import 'dart:async';
 import 'dart:isolate';
 
@@ -56,7 +60,11 @@ Future<Result> asyncRun<Params, Result>(
   }
 }
 
-void _asyncRun<Params, Result> (
+void _asyncRun<Params, Result>(
     _MessageContainer<Params, Result> container) async {
   container._receiveSendPort.send(await container.apply());
+}
+
+FutureOr<T> asyncFutureRun<T>(FutureOr<T> Function() futureCall) {
+  return Future.delayed(Duration.zero, futureCall);
 }

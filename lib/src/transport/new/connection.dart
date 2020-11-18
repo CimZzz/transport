@@ -1,13 +1,13 @@
 import 'dart:async';
+
 /// Created by CimZzz
 /// Response 代理连接
 /// 抽象出来作为代理连接的基类
 
 import 'dart:io';
 
-import 'package:transport/src/transport/new/socket_wrapper.dart';
-
 import '../../proxy_completer.dart';
+import 'socket_wrapper.dart';
 
 /// 连接基类
 abstract class Connection {
@@ -15,7 +15,7 @@ abstract class Connection {
   Stream<List<int>> openStream();
 
   /// 写入数据
-  Future<void> writeData(List<int> data);
+  void writeData(List<int> data);
 
   /// 关闭流连接
   void close();
@@ -28,46 +28,64 @@ abstract class Connection {
 
   /// 进行数据传输
   Future<void> doTransport(Connection connection) {
+    _completer = ProxyCompleter();
     _isTransporting = true;
-    connection.openStream().listen((event) async {
+    connection.openStream().listen((event) {
       try {
-        await writeData(event);
-      }
-      catch(e) {
+        writeData(event);
+      } catch (error, stackTrace) {
         close();
-        if(_isTransporting) {
+        if (_isTransporting) {
           _isTransporting = false;
           connection.close();
         }
-        _completer.complete(null);
+        _completer.completeError(error, stackTrace);
       }
-    }, onError: (e, [stackTrace]) {
+    }, onError: (error, stackTrace) {
       close();
-      if(_isTransporting) {
+      if (_isTransporting) {
+        _isTransporting = false;
+        connection.close();
+      }
+      _completer.completeError(error, stackTrace);
+    }, onDone: () {
+      // 完成
+      close();
+      if (_isTransporting) {
         _isTransporting = false;
         connection.close();
       }
       _completer.complete(null);
     });
-    openStream().listen((event) async {
-      try  {
-        await connection.writeData(event);
-      } catch(e) {
+
+    openStream().listen((event) {
+      try {
+        connection.writeData(event);
+      } catch (error, stackTrace) {
         close();
-        if(_isTransporting) {
+        if (_isTransporting) {
           _isTransporting = false;
           connection.close();
         }
-      _completer.complete(null);
+        _completer.completeError(error, stackTrace);
       }
-    }, onError: (e, [stackTrace]) {
+    }, onError: (error, stackTrace) {
       close();
-      if(_isTransporting) {
+      if (_isTransporting) {
+        _isTransporting = false;
+        connection.close();
+      }
+      _completer.completeError(error, stackTrace);
+    }, onDone: () {
+      // 完成
+      close();
+      if (_isTransporting) {
         _isTransporting = false;
         connection.close();
       }
       _completer.complete(null);
     });
+
     return _completer.future;
   }
 }
@@ -76,7 +94,6 @@ abstract class Connection {
 class SocketConnection extends Connection {
   SocketConnection(this._socketWrapper);
   SocketWrapper _socketWrapper;
-
 
   @override
   void close() {
@@ -99,7 +116,7 @@ class SocketConnection extends Connection {
 class ProxyConnection extends Connection {
   ProxyConnection(this.writeDataCallback);
 
-  final Future<void> Function(List<int> data) writeDataCallback;
+  final void Function(List<int> data) writeDataCallback;
   var _controller = StreamController<List<int>>();
 
   @override
@@ -112,7 +129,7 @@ class ProxyConnection extends Connection {
   Stream<List<int>> openStream() => _controller?.stream;
 
   @override
-  Future<void> writeData(List<int> data) {
+  void writeData(List<int> data) {
     return writeDataCallback(data);
   }
 
@@ -123,9 +140,9 @@ class ProxyConnection extends Connection {
 }
 
 /// 本地代理连接
-class LocalResponseConnection extends Connection {
-  LocalResponseConnection({this.ipAddress, this.port});
-  
+class AddressConnection extends Connection {
+  AddressConnection({this.ipAddress, this.port});
+
   final String ipAddress;
   final int port;
   Socket _socket;
@@ -143,8 +160,8 @@ class LocalResponseConnection extends Connection {
   }
 
   @override
-  Future<void> writeData(List<int> data) async {
+  void writeData(List<int> data) {
     _socket?.add(data);
-    await _socket?.flush();
+    _socket?.flush();
   }
 }

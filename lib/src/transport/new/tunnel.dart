@@ -19,22 +19,29 @@ abstract class Tunnel {
     timeoutStep.doAction().then((_) {
       return handShakeSuccess(_completer, socketWrapper);
     }, onError: (e, stackTrace) {
-          _completer.completeError(e, stackTrace);
+      _completer.completeError(e, stackTrace);
     }).catchError((e, stackTrace) {
       _completer.completeError(e, stackTrace);
-    }); 
+    });
+    handShake(socketWrapper).then((value) {
+      timeoutStep.innerCompleter.complete();
+    }, onError: (error, stackTrace) {
+      timeoutStep.innerCompleter.completeError(error, stackTrace);
+    });
+
     return _completer.future;
   }
 
-  Future<void> handShakeSuccess(ProxyCompleter completer, SocketWrapper socketWrapper) {
-    transformByteStream(socketWrapper.reader.releaseStream(), (reader) async {
-      try {
+  Future<void> handShakeSuccess(
+      ProxyCompleter completer, SocketWrapper socketWrapper) async {
+    try {
+      final reader = socketWrapper.reader;
+      while (!reader.isEnd) {
         await handleSocketReader(reader, socketWrapper.socket);
       }
-      catch(e, stackTrace) {
-        completer.completeError(e, stackTrace);
-      }
-    });
+    } catch (e, stackTrace) {
+      completer.completeError(e, stackTrace);
+    }
     return null;
   }
 

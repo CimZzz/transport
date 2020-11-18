@@ -7,9 +7,10 @@ class CommandWriter {
   CommandWriter._();
 
   /// 发送心跳报文
-  static Future<void> sendHeartbeat(Socket socket, {bool isNeedReply = false}) {
+  static Future<void> sendHeartbeat(Socket socket,
+      {bool isNeedReply = false}) async {
     socket.add([0x00, isNeedReply ? 0x01 : 0x00]);
-    return socket.flush();
+    await socket.flush();
   }
 
   /// 发送申请 Reply Socket 指令
@@ -21,7 +22,7 @@ class CommandWriter {
       (matchCode >> 8) & 0xFF,
       (matchCode >> 16) & 0xFF,
       (matchCode >> 24) & 0xFF,
-     ]);
-     return socket.flush();
+    ]);
+    return socket.flush();
   }
 }

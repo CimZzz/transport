@@ -7,13 +7,11 @@ import 'dart:convert';
 
 import 'dart:io';
 
-import 'package:stream_data_reader/stream_data_reader.dart';
-import 'package:transport/src/framework/general_methods.dart';
+import '../../framework/general_methods.dart';
 
 import '../../step.dart';
 import 'bridge.dart';
 import 'command_writer.dart';
-import 'connection.dart';
 import 'heartbeat_machine.dart';
 import 'reply_socket.dart';
 import 'socket_wrapper.dart';
@@ -215,7 +213,7 @@ class _ResponseClient {
     // 启动心跳机
     heartbeatMachine.monitor().listen((_) {
       // 推送心跳报文
-      CommandWriter.sendHeartbeat(socketWrapper.socket, isNeedReply: true);
+      CommandWriter.sendHeartbeat(socketWrapper, isNeedReply: true);
     }, onError: (error) {
       // 心跳超时
       unfortunateError(error);
@@ -231,7 +229,7 @@ class _ResponseClient {
             // 收到心跳报文
             final isNeedReply = await reader.readOneByte() & 0xFF;
             if (isNeedReply == 0x01) {
-              await CommandWriter.sendHeartbeat(socketWrapper.socket);
+              CommandWriter.sendHeartbeat(socketWrapper);
             }
             break;
           case 0x01:

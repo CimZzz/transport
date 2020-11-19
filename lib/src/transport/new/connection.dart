@@ -17,6 +17,9 @@ abstract class Connection {
   /// 写入数据
   void writeData(List<int> data);
 
+  /// 保证请求正常连接
+  Future<void> checkConnection();
+
   /// 关闭流连接
   void close();
 
@@ -27,66 +30,73 @@ abstract class Connection {
   var _isTransporting = false;
 
   /// 进行数据传输
-  Future<void> doTransport(Connection connection) {
+  Future<void> doTransport(Connection connection) async {
     _completer = ProxyCompleter();
     _isTransporting = true;
-    connection.openStream().listen((event) {
-      try {
-        writeData(event);
-      } catch (error, stackTrace) {
+    try {
+      await checkConnection();
+      await connection.checkConnection();
+
+      connection.openStream().listen((event) {
+        try {
+          writeData(event);
+        } catch (error, stackTrace) {
+          close();
+          if (_isTransporting) {
+            _isTransporting = false;
+            connection.close();
+          }
+          _completer.completeError(error, stackTrace);
+        }
+      }, onError: (error, stackTrace) {
         close();
         if (_isTransporting) {
           _isTransporting = false;
           connection.close();
         }
         _completer.completeError(error, stackTrace);
-      }
-    }, onError: (error, stackTrace) {
-      close();
-      if (_isTransporting) {
-        _isTransporting = false;
-        connection.close();
-      }
-      _completer.completeError(error, stackTrace);
-    }, onDone: () {
-      // 完成
-      close();
-      if (_isTransporting) {
-        _isTransporting = false;
-        connection.close();
-      }
-      _completer.complete(null);
-    });
+      }, onDone: () {
+        // 完成
+        close();
+        if (_isTransporting) {
+          _isTransporting = false;
+          connection.close();
+        }
+        _completer.complete(null);
+      });
 
-    openStream().listen((event) {
-      try {
-        connection.writeData(event);
-      } catch (error, stackTrace) {
+      openStream().listen((event) {
+        try {
+          connection.writeData(event);
+        } catch (error, stackTrace) {
+          close();
+          if (_isTransporting) {
+            _isTransporting = false;
+            connection.close();
+          }
+          _completer.completeError(error, stackTrace);
+        }
+      }, onError: (error, stackTrace) {
         close();
         if (_isTransporting) {
           _isTransporting = false;
           connection.close();
         }
         _completer.completeError(error, stackTrace);
-      }
-    }, onError: (error, stackTrace) {
-      close();
-      if (_isTransporting) {
-        _isTransporting = false;
-        connection.close();
-      }
+      }, onDone: () {
+        // 完成
+        close();
+        if (_isTransporting) {
+          _isTransporting = false;
+          connection.close();
+        }
+        _completer.complete(null);
+      });
+    } catch (error, stackTrace) {
       _completer.completeError(error, stackTrace);
-    }, onDone: () {
-      // 完成
-      close();
-      if (_isTransporting) {
-        _isTransporting = false;
-        connection.close();
-      }
-      _completer.complete(null);
-    });
+    }
 
-    return _completer.future;
+    return await _completer.future;
   }
 }
 
@@ -94,6 +104,11 @@ abstract class Connection {
 class SocketConnection extends Connection {
   SocketConnection(this._socketWrapper);
   SocketWrapper _socketWrapper;
+
+  @override
+  Future<void> checkConnection() {
+    return Future.value();
+  }
 
   @override
   void close() {
@@ -105,9 +120,9 @@ class SocketConnection extends Connection {
   Stream<List<int>> openStream() => _socketWrapper.reader.releaseStream();
 
   @override
-  Future<void> writeData(List<int> data) {
-    _socketWrapper?.socket?.add(data);
-    return _socketWrapper?.socket?.flush();
+  void writeData(List<int> data) {
+    _socketWrapper?.add(data);
+    _socketWrapper?.flush();
   }
 }
 
@@ -118,6 +133,11 @@ class ProxyConnection extends Connection {
 
   final void Function(List<int> data) writeDataCallback;
   var _controller = StreamController<List<int>>();
+
+  @override
+  Future<void> checkConnection() {
+    return Future.value();
+  }
 
   @override
   void close() {
@@ -145,23 +165,27 @@ class AddressConnection extends Connection {
 
   final String ipAddress;
   final int port;
-  Socket _socket;
+  SocketWrapper _socketWrapper;
+
+  @override
+  Future<void> checkConnection() async {
+    _socketWrapper ??= SocketWrapper(await Socket.connect(ipAddress, port));
+  }
 
   @override
   void close() {
-    _socket?.destroy();
-    _socket = null;
+    _socketWrapper?.close();
+    _socketWrapper = null;
   }
 
   @override
   Stream<List<int>> openStream() async* {
-    _socket ??= await Socket.connect(ipAddress, port);
-    yield* _socket;
+    yield* _socketWrapper.reader.releaseStream();
   }
 
   @override
   void writeData(List<int> data) {
-    _socket?.add(data);
-    _socket?.flush();
+    _socketWrapper?.add(data);
+    _socketWrapper?.flush();
   }
 }

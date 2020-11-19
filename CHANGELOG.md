@@ -38,3 +38,7 @@
 - allow bridge client specify peer address & port
 - allow bridge client refuse response.
 - fix intranet not access problem
+
+## 1.0.7
+
+- 重新设计 BridgeServer，移除旧版所有代理服务器

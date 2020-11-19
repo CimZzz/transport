@@ -37,7 +37,7 @@ abstract class Tunnel {
     try {
       final reader = socketWrapper.reader;
       while (!reader.isEnd) {
-        await handleSocketReader(reader, socketWrapper.socket);
+        await handleSocketReader(reader, socketWrapper);
       }
     } catch (e, stackTrace) {
       completer.completeError(e, stackTrace);
@@ -46,5 +46,6 @@ abstract class Tunnel {
   }
 
   Future<bool> handShake(SocketWrapper socketWrapper);
-  Future<void> handleSocketReader(DataReader reader, Socket socket) => null;
+  Future<void> handleSocketReader(DataReader reader, SocketWrapper socket) =>
+      null;
 }

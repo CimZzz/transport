@@ -7,12 +7,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:stream_data_reader/stream_data_reader.dart';
-import 'package:transport/src/framework/general_methods.dart';
-import 'package:transport/src/transport/new/command_writer.dart';
-import 'package:transport/src/transport/new/heartbeat_machine.dart';
 
 import '../../proxy_completer.dart';
+import 'command_writer.dart';
 import 'connection.dart';
+import 'heartbeat_machine.dart';
 import 'socket_wrapper.dart';
 import 'bridge.dart';
 import 'tunnel.dart';
@@ -61,7 +60,6 @@ class ReplySocket extends Tunnel {
     _proxyConnection = null;
     _wrapper?.close();
     _wrapper = null;
-    print('关闭完成');
   }
 
   /// 与 Bridge 握手
@@ -109,10 +107,9 @@ class ReplySocket extends Tunnel {
         interval: const Duration(seconds: 1), remindCount: 6, timeoutCount: 10);
     _heartbeatMachine.monitor().listen((_) {
       // 发送提醒心跳
-      CommandWriter.sendHeartbeat(socketWrapper.socket, isNeedReply: true);
+      CommandWriter.sendHeartbeat(socketWrapper, isNeedReply: true);
     }, onError: (error) {
       // 心跳超时
-      print('心跳超时');
       close();
     });
     socketWrapper.socket.add([0x01]);
@@ -123,12 +120,13 @@ class ReplySocket extends Tunnel {
 
   /// 处理 Session Request 相关指令
   @override
-  Future<void> handleSocketReader(DataReader reader, Socket socket) async {
+  Future<void> handleSocketReader(
+      DataReader reader, SocketWrapper socket) async {
+    _heartbeatMachine?.clearCount();
     final dataType = await reader.readOneByte() & 0xFF;
     switch (dataType) {
       case 0x00:
         // 收到心跳报文
-        print('收到心跳报文');
         final isNeedReply = await reader.readOneByte() & 0xFF;
         if (isNeedReply == 0x01) {
           await CommandWriter.sendHeartbeat(socket);
@@ -141,7 +139,6 @@ class ReplySocket extends Tunnel {
           close();
           return;
         }
-        print('收到代理指令: $matchCode');
 
         // 检查代理模式
         final proxyMode = await reader.readOneByte() & 0xFF;
@@ -165,18 +162,19 @@ class ReplySocket extends Tunnel {
         final spliceLength = await reader.readShort(bigEndian: false);
 
         _proxyConnection = ProxyConnection((data) {
-          print('收到数据写给 connection: $matchCode');
           var length = data.length;
+          var beginIdx = 0;
           while (length > 0) {
             var nextDataLength = spliceLength;
             if (length < spliceLength) {
               nextDataLength = length;
             }
-            socket.add(
-                [0x02, nextDataLength & 0xFF, (nextDataLength >> 8) & 0xFF]);
-            socket.add(data);
-            unawait(socket.flush());
+            socket.writeByte(0x02);
+            socket.writeShort(nextDataLength, bigEndian: false);
+            socket.add(data.sublist(beginIdx, beginIdx + nextDataLength));
+            socket.flush();
             length -= nextDataLength;
+            beginIdx += nextDataLength;
           }
         });
         // ignore: unawaited_futures
@@ -197,11 +195,11 @@ class ReplySocket extends Tunnel {
           return;
         }
 
-        print('收到数据写给 proxyConnection: $matchCode');
         // 读取数据长度
         final length = await reader.readShort(bigEndian: false);
+        final bytes = await reader.readBytes(length: length);
         // 写入数据
-        _proxyConnection?.addStreamData(await reader.readBytes(length: length));
+        _proxyConnection?.addStreamData(bytes);
         return;
     }
 

@@ -3,26 +3,23 @@
 
 import 'dart:io';
 
+import 'package:transport/src/transport/new/socket_wrapper.dart';
+
 class CommandWriter {
   CommandWriter._();
 
   /// 发送心跳报文
-  static Future<void> sendHeartbeat(Socket socket,
+  static void sendHeartbeat(SocketWrapper socket,
       {bool isNeedReply = false}) async {
     socket.add([0x00, isNeedReply ? 0x01 : 0x00]);
-    await socket.flush();
+    socket.flush();
   }
 
   /// 发送申请 Reply Socket 指令
   /// 由 Bridge 端发往 Response Socket 端
-  static Future<void> sendApplyReply(Socket socket, int matchCode) {
-    socket.add([
-      0x01,
-      matchCode & 0xFF,
-      (matchCode >> 8) & 0xFF,
-      (matchCode >> 16) & 0xFF,
-      (matchCode >> 24) & 0xFF,
-    ]);
-    return socket.flush();
+  static void sendApplyReply(SocketWrapper socket, int matchCode) {
+    socket.writeByte(0x01);
+    socket.writeInt(matchCode, bigEndian: false);
+    socket.flush();
   }
 }

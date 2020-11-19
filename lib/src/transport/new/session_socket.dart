@@ -17,7 +17,6 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:stream_data_reader/stream_data_reader.dart';
-import 'package:transport/src/framework/general_methods.dart';
 
 import '../../proxy_completer.dart';
 import 'command_writer.dart';
@@ -124,11 +123,7 @@ class SessionSocket extends Tunnel {
         interval: const Duration(seconds: 1), remindCount: 6, timeoutCount: 10);
     _heartbeatMachine.monitor().listen((_) {
       // 发送提醒心跳
-      CommandWriter.sendHeartbeat(socketWrapper.socket, isNeedReply: true)
-          .catchError((error, stackTrace) {
-        // 发送心跳指令失败
-        close();
-      });
+      CommandWriter.sendHeartbeat(socketWrapper, isNeedReply: true);
     }, onError: (error) {
       // 心跳超时
       close();
@@ -140,7 +135,9 @@ class SessionSocket extends Tunnel {
 
   /// 处理 Reply Socket 相关指令
   @override
-  Future<void> handleSocketReader(DataReader reader, Socket socket) async {
+  Future<void> handleSocketReader(
+      DataReader reader, SocketWrapper socket) async {
+    _heartbeatMachine?.clearCount();
     final dataType = await reader.readOneByte() & 0xFF;
     switch (dataType) {
       case 0x00:
@@ -157,7 +154,6 @@ class SessionSocket extends Tunnel {
           close();
           return;
         }
-        print('收到代理指令');
 
         // 目前默认都是普通代理模式
         // 发送 Ip 字节长度, Ip 字节数组, 端口号, 分片长度(目前默认 1024)
@@ -172,16 +168,19 @@ class SessionSocket extends Tunnel {
 
         _proxyConnection = ProxyConnection((data) {
           var length = data.length;
+          var beginIdx = 0;
           while (length > 0) {
             var nextDataLength = spliceLength;
             if (length < spliceLength) {
               nextDataLength = length;
             }
-            socket.add(
-                [0x02, nextDataLength & 0xFF, (nextDataLength >> 8) & 0xFF]);
-            socket.add(data);
-            unawait(socket.flush());
+
+            socket.writeByte(0x02);
+            socket.writeShort(nextDataLength, bigEndian: false);
+            socket.add(data.sublist(beginIdx, beginIdx + nextDataLength));
+            socket.flush();
             length -= nextDataLength;
+            beginIdx += nextDataLength;
           }
         });
 
@@ -201,7 +200,6 @@ class SessionSocket extends Tunnel {
           close();
           return;
         }
-        print('收到数据写给 proxyConnection');
         // 读取数据长度
         final length = await reader.readShort(bigEndian: false);
         // 写入数据

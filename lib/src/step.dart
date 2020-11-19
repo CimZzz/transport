@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:transport/src/proxy_completer.dart';
-import 'package:transport/src/transport/server/socket_bundle.dart';
 
 /// Base Step
 abstract class BaseStep<T> {

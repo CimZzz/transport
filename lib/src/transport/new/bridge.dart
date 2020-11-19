@@ -211,7 +211,7 @@ class TransportBridge {
     // 启动心跳机
     client._heartbeatMachine.monitor().listen((_) {
       // 推送心跳报文
-      CommandWriter.sendHeartbeat(client.socket, isNeedReply: true);
+      CommandWriter.sendHeartbeat(client, isNeedReply: true);
     }, onError: (error) {
       // 心跳超时
       _closeClient(client);
@@ -324,20 +324,19 @@ class TransportBridge {
   }
 
   /// 处理查询 Socket
-  /// 未完成
+  /// 完成
   void _querySocketHandle(TransportClient client) {
     final timeoutStep = TimeoutStep(timeout: Duration(seconds: 10));
     timeoutStep.doAction().then((result) {
       /// 完成指令后，关闭
-      /// todo
+      client.close();
     }, onError: (e, [stackTrace]) {
       /// 异常处理
-      /// todo
+      client.close();
     });
 
     timeoutStep.innerCompleter.complete(() async {
       // 处理查询 Socket 指令
-      final socket = client.socket;
       final reader = client.reader;
       final cmdType = await reader.readOneByte();
       switch (cmdType) {
@@ -348,9 +347,10 @@ class TransportBridge {
             clientInfoList.add(TransportClientInfo(clientId: clientId));
           });
           final totalLength = clientInfoList.length;
-          socket.add([totalLength & 0xFF, (totalLength >> 8) & 0xFF]);
-          socket.add(await serializeTransportClient(clientInfoList));
-          await socket.flush();
+          final bytes = await serializeTransportClient(clientInfoList);
+          client.writeShort(totalLength, bigEndian: false);
+          client.add(bytes);
+          client.flush();
           break;
       }
       return true;
@@ -390,12 +390,10 @@ class TransportBridge {
       SocketConnection(sessionClient)
           .doTransport(SocketConnection(replyClient))
           .then((_) {
-        print('xxxxx');
         // 传输完成
         _closeClient(sessionClient);
         _closeClient(replyClient);
       }, onError: (error) {
-        print('zzzzz');
         // 传输过程中发生异常，终止传输
         _closeClient(sessionClient);
         _closeClient(replyClient);
@@ -407,11 +405,7 @@ class TransportBridge {
     responseClient._matchCodeMap[matchCode] = matchScope;
 
     // 向 ResponseClient 发送指令
-    CommandWriter.sendApplyReply(responseClient.socket, matchCode)
-        .catchError((error) {
-      // 发送响应指令失败，立即终止 Response Socket
-      _closeClient(responseClient);
-    });
+    CommandWriter.sendApplyReply(responseClient, matchCode);
   }
 
   /// 处理响应 Socket
@@ -442,7 +436,7 @@ class TransportBridge {
             // 收到心跳报文
             final isNeedReply = await dataReader.readOneByte() & 0xFF;
             if (isNeedReply == 0x01) {
-              await CommandWriter.sendHeartbeat(client.socket);
+              await CommandWriter.sendHeartbeat(client);
             }
             break;
         }
